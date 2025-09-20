@@ -1,7 +1,7 @@
 **.vo
 **.vok
 **.aux
-*.glob
 *.cache
 *.log
 **.vos
+./test.glob
