@@ -1,55 +1,7 @@
-DIGEST 7a1c4a5614a35777c7fa0d8b6dada6cf
+DIGEST e0f22495a39c8e067344472a41e6a33b
 Ftest
-R15:18 Coq.Lists.List <> <> lib
-R60:65 Coq.ZArith.ZArith <> <> lib
-def 136:143 <> find_max
-R150:153 Coq.Init.Datatypes <> list ind
-R155:155 Coq.Numbers.BinNums <> Z ind
-R160:165 Coq.Init.Datatypes <> option ind
-R167:167 Coq.Numbers.BinNums <> Z ind
-R181:181 test <> l var
-R193:194 Coq.Lists.List ListNotations ::list_scope:'['_']' not
-R199:202 Coq.Init.Datatypes <> None constr
-R210:213 Coq.Init.Datatypes <> ::list_scope:x_'::'_x not
-R233:240 test <> find_max def
-R259:262 Coq.Init.Datatypes <> None constr
-R267:270 Coq.Init.Datatypes <> Some constr
-R283:286 Coq.Init.Datatypes <> Some constr
-R293:296 Coq.Init.Datatypes <> Some constr
-R299:303 Coq.ZArith.BinInt Z max def
-def 387:392 <> is_max
-R399:402 Coq.Init.Datatypes <> list ind
-R404:404 Coq.Numbers.BinNums <> Z ind
-R412:412 Coq.Numbers.BinNums <> Z ind
-R427:430 Coq.Init.Logic <> ::type_scope:x_'/\'_x not
-R421:422 Coq.Lists.List <> In def
-R426:426 test <> l var
-R424:424 test <> m var
-R447:450 Coq.Init.Logic <> ::type_scope:x_'->'_x not
-R451:454 Coq.ZArith.BinInt Z le def
-R458:458 test <> m var
-R456:456 test <> x var
-R441:442 Coq.Lists.List <> In def
-R446:446 test <> l var
-R444:444 test <> x var
-def 493:505 <> test_find_max
-R541:543 Coq.Init.Logic <> ::type_scope:x_'='_x not
-R512:519 test <> find_max def
-R521:521 Coq.Lists.List ListNotations ::list_scope:'['_x_';'_x_';'_'..'_';'_x_']' not
-R525:526 Coq.Lists.List ListNotations ::list_scope:'['_x_';'_x_';'_'..'_';'_x_']' not
-R530:531 Coq.Lists.List ListNotations ::list_scope:'['_x_';'_x_';'_'..'_';'_x_']' not
-R535:536 Coq.Lists.List ListNotations ::list_scope:'['_x_';'_x_';'_'..'_';'_x_']' not
-R540:540 Coq.Lists.List ListNotations ::list_scope:'['_x_';'_x_';'_'..'_';'_x_']' not
-R544:547 Coq.Init.Datatypes <> Some constr
-prf 628:637 <> Z_max_spec
-R662:664 Coq.Init.Logic <> ::type_scope:x_'='_x not
-R653:657 Coq.ZArith.BinInt Z max def
-R661:661 test <> b var
-R659:659 test <> a var
-R668:675 Coq.ZArith.ZArith_dec <> Z_le_dec def
-R679:679 test <> b var
-R677:677 test <> a var
-R693:693 test <> a var
-R686:686 test <> b var
-R725:732 Coq.ZArith.ZArith_dec <> Z_le_dec def
-R725:732 Coq.ZArith.ZArith_dec <> Z_le_dec def
+R514:527 Coq.Lists.List <> <> lib
+R546:560 Coq.Arith.Arith <> <> lib
+R579:595 Coq.micromega.Lia <> <> lib
+def 905:912 <> find_max
+R922:925 Coq.Init.Datatypes <> list ind
