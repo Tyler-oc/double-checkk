@@ -15,9 +15,9 @@ Fixpoint find_max (l : list Z) : option Z :=
 
 (* Specification: m is the maximum of l *)
 Definition is_max (l : list Z) (m : Z) :=
-  In m l /\ forall x, In x l -> x <= m.
+  In m l /\ forall x, In x l -> Z.le x m.
 
 (* Example usage and proof outline *)
 Example test_find_max :
-  find_max [1; 2; 3; 4] = Some 4.
+  find_max [1%Z; 2%Z; 3%Z; 4%Z] = Some 4%Z.
 Proof. reflexivity. Qed.

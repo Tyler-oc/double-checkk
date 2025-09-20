@@ -1,4 +1,4 @@
-DIGEST 2098fb38c348e9ff5a62ea93797216b9
+DIGEST bc9de66c070f5017287b113e1cdd94bf
 Ftest
 R15:18 Coq.Lists.List <> <> lib
 R60:65 Coq.ZArith.ZArith <> <> lib
@@ -26,9 +26,18 @@ R421:422 Coq.Lists.List <> In def
 R426:426 test <> l var
 R424:424 test <> m var
 R447:450 Coq.Init.Logic <> ::type_scope:x_'->'_x not
-R452:455 Coq.Init.Peano <> ::nat_scope:x_'<='_x not
-R451:451 test <> x var
-R456:456 test <> m var
+R451:454 Coq.ZArith.BinInt Z le def
+R458:458 test <> m var
+R456:456 test <> x var
 R441:442 Coq.Lists.List <> In def
 R446:446 test <> l var
 R444:444 test <> x var
+def 511:523 <> test_find_max
+R559:561 Coq.Init.Logic <> ::type_scope:x_'='_x not
+R530:537 test <> find_max def
+R539:539 Coq.Lists.List ListNotations ::list_scope:'['_x_';'_x_';'_'..'_';'_x_']' not
+R543:544 Coq.Lists.List ListNotations ::list_scope:'['_x_';'_x_';'_'..'_';'_x_']' not
+R548:549 Coq.Lists.List ListNotations ::list_scope:'['_x_';'_x_';'_'..'_';'_x_']' not
+R553:554 Coq.Lists.List ListNotations ::list_scope:'['_x_';'_x_';'_'..'_';'_x_']' not
+R558:558 Coq.Lists.List ListNotations ::list_scope:'['_x_';'_x_';'_'..'_';'_x_']' not
+R562:565 Coq.Init.Datatypes <> Some constr
