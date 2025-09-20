@@ -1,0 +1,34 @@
+DIGEST 2098fb38c348e9ff5a62ea93797216b9
+Ftest
+R15:18 Coq.Lists.List <> <> lib
+R60:65 Coq.ZArith.ZArith <> <> lib
+def 136:143 <> find_max
+R150:153 Coq.Init.Datatypes <> list ind
+R155:155 Coq.Numbers.BinNums <> Z ind
+R160:165 Coq.Init.Datatypes <> option ind
+R167:167 Coq.Numbers.BinNums <> Z ind
+R181:181 test <> l var
+R193:194 Coq.Lists.List ListNotations ::list_scope:'['_']' not
+R199:202 Coq.Init.Datatypes <> None constr
+R210:213 Coq.Init.Datatypes <> ::list_scope:x_'::'_x not
+R233:240 test <> find_max def
+R259:262 Coq.Init.Datatypes <> None constr
+R267:270 Coq.Init.Datatypes <> Some constr
+R283:286 Coq.Init.Datatypes <> Some constr
+R293:296 Coq.Init.Datatypes <> Some constr
+R299:303 Coq.ZArith.BinInt Z max def
+def 387:392 <> is_max
+R399:402 Coq.Init.Datatypes <> list ind
+R404:404 Coq.Numbers.BinNums <> Z ind
+R412:412 Coq.Numbers.BinNums <> Z ind
+R427:430 Coq.Init.Logic <> ::type_scope:x_'/\'_x not
+R421:422 Coq.Lists.List <> In def
+R426:426 test <> l var
+R424:424 test <> m var
+R447:450 Coq.Init.Logic <> ::type_scope:x_'->'_x not
+R452:455 Coq.Init.Peano <> ::nat_scope:x_'<='_x not
+R451:451 test <> x var
+R456:456 test <> m var
+R441:442 Coq.Lists.List <> In def
+R446:446 test <> l var
+R444:444 test <> x var
