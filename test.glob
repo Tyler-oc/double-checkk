@@ -1,4 +1,4 @@
-DIGEST bc9de66c070f5017287b113e1cdd94bf
+DIGEST 7a1c4a5614a35777c7fa0d8b6dada6cf
 Ftest
 R15:18 Coq.Lists.List <> <> lib
 R60:65 Coq.ZArith.ZArith <> <> lib
@@ -32,12 +32,24 @@ R456:456 test <> x var
 R441:442 Coq.Lists.List <> In def
 R446:446 test <> l var
 R444:444 test <> x var
-def 511:523 <> test_find_max
-R559:561 Coq.Init.Logic <> ::type_scope:x_'='_x not
-R530:537 test <> find_max def
-R539:539 Coq.Lists.List ListNotations ::list_scope:'['_x_';'_x_';'_'..'_';'_x_']' not
-R543:544 Coq.Lists.List ListNotations ::list_scope:'['_x_';'_x_';'_'..'_';'_x_']' not
-R548:549 Coq.Lists.List ListNotations ::list_scope:'['_x_';'_x_';'_'..'_';'_x_']' not
-R553:554 Coq.Lists.List ListNotations ::list_scope:'['_x_';'_x_';'_'..'_';'_x_']' not
-R558:558 Coq.Lists.List ListNotations ::list_scope:'['_x_';'_x_';'_'..'_';'_x_']' not
-R562:565 Coq.Init.Datatypes <> Some constr
+def 493:505 <> test_find_max
+R541:543 Coq.Init.Logic <> ::type_scope:x_'='_x not
+R512:519 test <> find_max def
+R521:521 Coq.Lists.List ListNotations ::list_scope:'['_x_';'_x_';'_'..'_';'_x_']' not
+R525:526 Coq.Lists.List ListNotations ::list_scope:'['_x_';'_x_';'_'..'_';'_x_']' not
+R530:531 Coq.Lists.List ListNotations ::list_scope:'['_x_';'_x_';'_'..'_';'_x_']' not
+R535:536 Coq.Lists.List ListNotations ::list_scope:'['_x_';'_x_';'_'..'_';'_x_']' not
+R540:540 Coq.Lists.List ListNotations ::list_scope:'['_x_';'_x_';'_'..'_';'_x_']' not
+R544:547 Coq.Init.Datatypes <> Some constr
+prf 628:637 <> Z_max_spec
+R662:664 Coq.Init.Logic <> ::type_scope:x_'='_x not
+R653:657 Coq.ZArith.BinInt Z max def
+R661:661 test <> b var
+R659:659 test <> a var
+R668:675 Coq.ZArith.ZArith_dec <> Z_le_dec def
+R679:679 test <> b var
+R677:677 test <> a var
+R693:693 test <> a var
+R686:686 test <> b var
+R725:732 Coq.ZArith.ZArith_dec <> Z_le_dec def
+R725:732 Coq.ZArith.ZArith_dec <> Z_le_dec def
