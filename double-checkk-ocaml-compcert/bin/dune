@@ -1,4 +1,4 @@
 (executable
  (public_name double-checkk-ocaml-compcert)
  (name main)
- (libraries cohttp-lwt-unix))
+ (libraries dream yojson))
