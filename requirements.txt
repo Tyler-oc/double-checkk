@@ -1,4 +1,0 @@
-ocaml 
-opam 
-coq 
-menhir

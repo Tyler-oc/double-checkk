@@ -1,7 +1,0 @@
-DIGEST e0f22495a39c8e067344472a41e6a33b
-Ftest
-R514:527 Coq.Lists.List <> <> lib
-R546:560 Coq.Arith.Arith <> <> lib
-R579:595 Coq.micromega.Lia <> <> lib
-def 905:912 <> find_max
-R922:925 Coq.Init.Datatypes <> list ind
