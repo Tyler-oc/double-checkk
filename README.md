@@ -1,4 +1,4 @@
-Coq 18.19.2
+Coq 8.19.2
 coq-compcert 3.15
 coq-vst 2.15
 
@@ -16,3 +16,12 @@ Requirements:
 Ocaml:
 -dream
 -yojson
+
+Get into Environment:
+1. opam switch list
+2. opam switch double-check
+
+
+opam install coq-compcert.3.15
+opam install coq-vst.2.15
+clightgen -normalize -o vst_test1.v test.c
