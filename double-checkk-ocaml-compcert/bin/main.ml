@@ -7,4 +7,3 @@ let () =
         Dream.get "/" (fun _ -> Dream.html "Hello, Double-Checkk!");
         Dream.get "/health" (fun _ -> Dream.json "{\"status\": \"ok\"}");
     ]
-

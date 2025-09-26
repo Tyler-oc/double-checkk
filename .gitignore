@@ -42,3 +42,7 @@ esy.lock/
 
 # Windows
 Thumbs.db
+
+
+**.tar.gz
+CompCert-3.15/
