@@ -1,22 +1,22 @@
 #include <stdio.h>
 
-int find_max(int nums[], int size)
+int is_greater(int a, int b)
 {
-    int max = nums[0];
-    for (int i = 1; i < size; i++)
-    {
-        if (nums[i] > max)
-        {
-            max = nums[i];
-        }
-    }
-    return max;
+    return a > b;
 }
 
 int main()
 {
-    int numbers[] = {3, 5, 7, 2, 8};
-    int max_value = find_max(numbers, 5);
-    printf("The maximum value is: %d\n", max_value);
+    int x = 10;
+    int y = 20;
+    printf("x: %d, y: %d\n", x, y);
+    if (is_greater(y, x))
+    {
+        printf("y is greater than x\n");
+    }
+    else
+    {
+        printf("x is greater than or equal to y\n");
+    }
     return 0;
 }

@@ -76,29 +76,23 @@ Definition ___compcert_va_float64 : ident := $"__compcert_va_float64".
 Definition ___compcert_va_int32 : ident := $"__compcert_va_int32".
 Definition ___compcert_va_int64 : ident := $"__compcert_va_int64".
 Definition ___stringlit_1 : ident := $"__stringlit_1".
-Definition _find_max : ident := $"find_max".
-Definition _i : ident := $"i".
+Definition ___stringlit_2 : ident := $"__stringlit_2".
+Definition ___stringlit_3 : ident := $"__stringlit_3".
+Definition _a : ident := $"a".
+Definition _b : ident := $"b".
+Definition _is_greater : ident := $"is_greater".
 Definition _main : ident := $"main".
-Definition _max : ident := $"max".
-Definition _max_value : ident := $"max_value".
-Definition _numbers : ident := $"numbers".
-Definition _nums : ident := $"nums".
 Definition _printf : ident := $"printf".
-Definition _size : ident := $"size".
+Definition _x : ident := $"x".
+Definition _y : ident := $"y".
 Definition _t'1 : ident := 128%positive.
 
 Definition v___stringlit_1 := {|
-  gvar_info := (tarray tschar 26);
-  gvar_init := (Init_int8 (Int.repr 84) :: Init_int8 (Int.repr 104) ::
-                Init_int8 (Int.repr 101) :: Init_int8 (Int.repr 32) ::
-                Init_int8 (Int.repr 109) :: Init_int8 (Int.repr 97) ::
-                Init_int8 (Int.repr 120) :: Init_int8 (Int.repr 105) ::
-                Init_int8 (Int.repr 109) :: Init_int8 (Int.repr 117) ::
-                Init_int8 (Int.repr 109) :: Init_int8 (Int.repr 32) ::
-                Init_int8 (Int.repr 118) :: Init_int8 (Int.repr 97) ::
-                Init_int8 (Int.repr 108) :: Init_int8 (Int.repr 117) ::
-                Init_int8 (Int.repr 101) :: Init_int8 (Int.repr 32) ::
-                Init_int8 (Int.repr 105) :: Init_int8 (Int.repr 115) ::
+  gvar_info := (tarray tschar 14);
+  gvar_init := (Init_int8 (Int.repr 120) :: Init_int8 (Int.repr 58) ::
+                Init_int8 (Int.repr 32) :: Init_int8 (Int.repr 37) ::
+                Init_int8 (Int.repr 100) :: Init_int8 (Int.repr 44) ::
+                Init_int8 (Int.repr 32) :: Init_int8 (Int.repr 121) ::
                 Init_int8 (Int.repr 58) :: Init_int8 (Int.repr 32) ::
                 Init_int8 (Int.repr 37) :: Init_int8 (Int.repr 100) ::
                 Init_int8 (Int.repr 10) :: Init_int8 (Int.repr 0) :: nil);
@@ -106,98 +100,90 @@ Definition v___stringlit_1 := {|
   gvar_volatile := false
 |}.
 
-Definition f_find_max := {|
+Definition v___stringlit_3 := {|
+  gvar_info := (tarray tschar 21);
+  gvar_init := (Init_int8 (Int.repr 121) :: Init_int8 (Int.repr 32) ::
+                Init_int8 (Int.repr 105) :: Init_int8 (Int.repr 115) ::
+                Init_int8 (Int.repr 32) :: Init_int8 (Int.repr 103) ::
+                Init_int8 (Int.repr 114) :: Init_int8 (Int.repr 101) ::
+                Init_int8 (Int.repr 97) :: Init_int8 (Int.repr 116) ::
+                Init_int8 (Int.repr 101) :: Init_int8 (Int.repr 114) ::
+                Init_int8 (Int.repr 32) :: Init_int8 (Int.repr 116) ::
+                Init_int8 (Int.repr 104) :: Init_int8 (Int.repr 97) ::
+                Init_int8 (Int.repr 110) :: Init_int8 (Int.repr 32) ::
+                Init_int8 (Int.repr 120) :: Init_int8 (Int.repr 10) ::
+                Init_int8 (Int.repr 0) :: nil);
+  gvar_readonly := true;
+  gvar_volatile := false
+|}.
+
+Definition v___stringlit_2 := {|
+  gvar_info := (tarray tschar 33);
+  gvar_init := (Init_int8 (Int.repr 120) :: Init_int8 (Int.repr 32) ::
+                Init_int8 (Int.repr 105) :: Init_int8 (Int.repr 115) ::
+                Init_int8 (Int.repr 32) :: Init_int8 (Int.repr 103) ::
+                Init_int8 (Int.repr 114) :: Init_int8 (Int.repr 101) ::
+                Init_int8 (Int.repr 97) :: Init_int8 (Int.repr 116) ::
+                Init_int8 (Int.repr 101) :: Init_int8 (Int.repr 114) ::
+                Init_int8 (Int.repr 32) :: Init_int8 (Int.repr 116) ::
+                Init_int8 (Int.repr 104) :: Init_int8 (Int.repr 97) ::
+                Init_int8 (Int.repr 110) :: Init_int8 (Int.repr 32) ::
+                Init_int8 (Int.repr 111) :: Init_int8 (Int.repr 114) ::
+                Init_int8 (Int.repr 32) :: Init_int8 (Int.repr 101) ::
+                Init_int8 (Int.repr 113) :: Init_int8 (Int.repr 117) ::
+                Init_int8 (Int.repr 97) :: Init_int8 (Int.repr 108) ::
+                Init_int8 (Int.repr 32) :: Init_int8 (Int.repr 116) ::
+                Init_int8 (Int.repr 111) :: Init_int8 (Int.repr 32) ::
+                Init_int8 (Int.repr 121) :: Init_int8 (Int.repr 10) ::
+                Init_int8 (Int.repr 0) :: nil);
+  gvar_readonly := true;
+  gvar_volatile := false
+|}.
+
+Definition f_is_greater := {|
   fn_return := tint;
   fn_callconv := cc_default;
-  fn_params := ((_nums, (tptr tint)) :: (_size, tint) :: nil);
+  fn_params := ((_a, tint) :: (_b, tint) :: nil);
   fn_vars := nil;
-  fn_temps := ((_max, tint) :: (_i, tint) :: (_t'1, tint) :: nil);
+  fn_temps := nil;
   fn_body :=
-(Ssequence
-  (Sset _max
-    (Ederef
-      (Ebinop Oadd (Etempvar _nums (tptr tint))
-        (Econst_int (Int.repr 0) tint) (tptr tint)) tint))
-  (Ssequence
-    (Ssequence
-      (Sset _i (Econst_int (Int.repr 1) tint))
-      (Sloop
-        (Ssequence
-          (Sifthenelse (Ebinop Olt (Etempvar _i tint) (Etempvar _size tint)
-                         tint)
-            Sskip
-            Sbreak)
-          (Ssequence
-            (Sset _t'1
-              (Ederef
-                (Ebinop Oadd (Etempvar _nums (tptr tint)) (Etempvar _i tint)
-                  (tptr tint)) tint))
-            (Sifthenelse (Ebinop Ogt (Etempvar _t'1 tint)
-                           (Etempvar _max tint) tint)
-              (Sset _max
-                (Ederef
-                  (Ebinop Oadd (Etempvar _nums (tptr tint))
-                    (Etempvar _i tint) (tptr tint)) tint))
-              Sskip)))
-        (Sset _i
-          (Ebinop Oadd (Etempvar _i tint) (Econst_int (Int.repr 1) tint)
-            tint))))
-    (Sreturn (Some (Etempvar _max tint)))))
+(Sreturn (Some (Ebinop Ogt (Etempvar _a tint) (Etempvar _b tint) tint)))
 |}.
 
 Definition f_main := {|
   fn_return := tint;
   fn_callconv := cc_default;
   fn_params := nil;
-  fn_vars := ((_numbers, (tarray tint 5)) :: nil);
-  fn_temps := ((_max_value, tint) :: (_t'1, tint) :: nil);
+  fn_vars := nil;
+  fn_temps := ((_x, tint) :: (_y, tint) :: (_t'1, tint) :: nil);
   fn_body :=
 (Ssequence
   (Ssequence
-    (Sassign
-      (Ederef
-        (Ebinop Oadd (Evar _numbers (tarray tint 5))
-          (Econst_int (Int.repr 0) tint) (tptr tint)) tint)
-      (Econst_int (Int.repr 3) tint))
+    (Sset _x (Econst_int (Int.repr 10) tint))
     (Ssequence
-      (Sassign
-        (Ederef
-          (Ebinop Oadd (Evar _numbers (tarray tint 5))
-            (Econst_int (Int.repr 1) tint) (tptr tint)) tint)
-        (Econst_int (Int.repr 5) tint))
+      (Sset _y (Econst_int (Int.repr 20) tint))
       (Ssequence
-        (Sassign
-          (Ederef
-            (Ebinop Oadd (Evar _numbers (tarray tint 5))
-              (Econst_int (Int.repr 2) tint) (tptr tint)) tint)
-          (Econst_int (Int.repr 7) tint))
+        (Scall None
+          (Evar _printf (Tfunction ((tptr tschar) :: nil) tint
+                          {|cc_vararg:=(Some 1); cc_unproto:=false; cc_structret:=false|}))
+          ((Evar ___stringlit_1 (tarray tschar 14)) :: (Etempvar _x tint) ::
+           (Etempvar _y tint) :: nil))
         (Ssequence
-          (Sassign
-            (Ederef
-              (Ebinop Oadd (Evar _numbers (tarray tint 5))
-                (Econst_int (Int.repr 3) tint) (tptr tint)) tint)
-            (Econst_int (Int.repr 2) tint))
           (Ssequence
-            (Sassign
-              (Ederef
-                (Ebinop Oadd (Evar _numbers (tarray tint 5))
-                  (Econst_int (Int.repr 4) tint) (tptr tint)) tint)
-              (Econst_int (Int.repr 8) tint))
-            (Ssequence
-              (Ssequence
-                (Scall (Some _t'1)
-                  (Evar _find_max (Tfunction ((tptr tint) :: tint :: nil)
-                                    tint cc_default))
-                  ((Evar _numbers (tarray tint 5)) ::
-                   (Econst_int (Int.repr 5) tint) :: nil))
-                (Sset _max_value (Etempvar _t'1 tint)))
-              (Ssequence
-                (Scall None
-                  (Evar _printf (Tfunction ((tptr tschar) :: nil) tint
-                                  {|cc_vararg:=(Some 1); cc_unproto:=false; cc_structret:=false|}))
-                  ((Evar ___stringlit_1 (tarray tschar 26)) ::
-                   (Etempvar _max_value tint) :: nil))
-                (Sreturn (Some (Econst_int (Int.repr 0) tint))))))))))
+            (Scall (Some _t'1)
+              (Evar _is_greater (Tfunction (tint :: tint :: nil) tint
+                                  cc_default))
+              ((Etempvar _y tint) :: (Etempvar _x tint) :: nil))
+            (Sifthenelse (Etempvar _t'1 tint)
+              (Scall None
+                (Evar _printf (Tfunction ((tptr tschar) :: nil) tint
+                                {|cc_vararg:=(Some 1); cc_unproto:=false; cc_structret:=false|}))
+                ((Evar ___stringlit_3 (tarray tschar 21)) :: nil))
+              (Scall None
+                (Evar _printf (Tfunction ((tptr tschar) :: nil) tint
+                                {|cc_vararg:=(Some 1); cc_unproto:=false; cc_structret:=false|}))
+                ((Evar ___stringlit_2 (tarray tschar 33)) :: nil))))
+          (Sreturn (Some (Econst_int (Int.repr 0) tint)))))))
   (Sreturn (Some (Econst_int (Int.repr 0) tint))))
 |}.
 
@@ -285,6 +271,8 @@ Definition global_definitions : list (ident * globdef fundef type) :=
                    (mksignature (AST.Xlong :: AST.Xlong :: nil) AST.Xlong
                      cc_default)) (tulong :: tulong :: nil) tulong
      cc_default)) :: (___stringlit_1, Gvar v___stringlit_1) ::
+ (___stringlit_3, Gvar v___stringlit_3) ::
+ (___stringlit_2, Gvar v___stringlit_2) ::
  (___builtin_ais_annot,
    Gfun(External (EF_builtin "__builtin_ais_annot"
                    (mksignature (AST.Xptr :: nil) AST.Xvoid
@@ -467,11 +455,11 @@ Definition global_definitions : list (ident * globdef fundef type) :=
                      {|cc_vararg:=(Some 1); cc_unproto:=false; cc_structret:=false|}))
      ((tptr tschar) :: nil) tint
      {|cc_vararg:=(Some 1); cc_unproto:=false; cc_structret:=false|})) ::
- (_find_max, Gfun(Internal f_find_max)) :: (_main, Gfun(Internal f_main)) ::
- nil).
+ (_is_greater, Gfun(Internal f_is_greater)) ::
+ (_main, Gfun(Internal f_main)) :: nil).
 
 Definition public_idents : list ident :=
-(_main :: _find_max :: _printf :: ___builtin_debug ::
+(_main :: _is_greater :: _printf :: ___builtin_debug ::
  ___builtin_write32_reversed :: ___builtin_write16_reversed ::
  ___builtin_read32_reversed :: ___builtin_read16_reversed ::
  ___builtin_fnmsub :: ___builtin_fnmadd :: ___builtin_fmsub ::
