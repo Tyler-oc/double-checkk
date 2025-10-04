@@ -1,2 +1,3 @@
 (library
- (name double_checkk_ocaml_compcert))
+ (name compcert_wrapper)
+ (libraries))  ; No external libraries needed

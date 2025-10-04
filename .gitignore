@@ -5,6 +5,9 @@
 *.log
 **.vos
 ./test.glob
+**.glob
+
+node_modules/
 
 #ocaml
 # Dune build artifacts
