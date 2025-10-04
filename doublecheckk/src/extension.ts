@@ -42,7 +42,7 @@ export function activate(context: vscode.ExtensionContext) {
     context.subscriptions.push(disposable);
 }
 
-// Example helper if backend is a local process
+// Future use: run local Ocaml exe's depending on operating system
 function runBackendProcess(code: string): Promise<{valid: boolean}> {
     return new Promise((resolve, reject) => {
         const proc = cp.spawn("path/to/ocaml/server", [], { stdio: ["pipe", "pipe", "inherit"] });
