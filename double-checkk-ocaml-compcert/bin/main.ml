@@ -6,12 +6,20 @@ let () =
   @@ Dream.router [
     Dream.get "/" (fun _ -> Dream.html "Hello, Double-Checkk!");
     Dream.get "/health" (fun _ -> Dream.json "{\"status\": \"ok\"}");
-    Dream.post "/verify" (fun request ->
+    Dream.post "/verify-compcert" (fun request ->
       let* body = Dream.body request in
-      let result = Compcert_wrapper.verify body in
-      if result then
-        Dream.json ~status:`OK {|{ "valid": true }|}
+      let compiles = Compcert_wrapper.verify body in
+      if compiles then
+        Dream.json ~status:`OK {|{ "compiles": true }|}
       else
-        Dream.json ~status:`OK {|{ "valid": false }|}
+        Dream.json ~status:`OK {|{ "compiles": false }|}
+    )
+    Dream.post "/verify-frama-c" (fun request ->
+      let* body = Dream.body request in
+      let result, valid = Frama_c_wrapper.verify body in
+      if valid then
+        Dream.json ~status:`OK {|{ "valid": true, "result": result }|}
+      else
+        Dream.json ~status:`OK {|{ "valid": false, "result": result }|}
     )
   ]
