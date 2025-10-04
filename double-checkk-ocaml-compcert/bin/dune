@@ -1,4 +1,4 @@
 (executable
  (public_name double-checkk-ocaml-compcert)
  (name main)
- (libraries dream yojson))
+ (libraries dream compcert_wrapper yojson))

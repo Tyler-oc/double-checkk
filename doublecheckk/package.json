@@ -12,12 +12,20 @@
   "activationEvents": [],
   "main": "./out/extension.js",
   "contributes": {
-    "commands": [
+  "commands": [
       {
-        "command": "doublecheckk.helloWorld",
-        "title": "Hello World"
+        "command": "doublecheckk.verifySelection",
+        "title": "Verify with DoubleCheckk"
       }
-    ]
+    ],
+    "menus": {
+      "editor/context": [
+        {
+          "command": "doublecheckk.verifySelection",
+          "when": "editorHasSelection"
+        }
+      ]
+    }
   },
   "scripts": {
     "vscode:prepublish": "npm run compile",
