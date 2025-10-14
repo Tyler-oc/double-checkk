@@ -12,19 +12,58 @@
   "activationEvents": [],
   "main": "./out/extension.js",
   "contributes": {
-  "commands": [
+    "commands": [
       {
         "command": "doublecheckk.verifySelection",
-        "title": "Verify with DoubleCheckk"
+        "title": "Double-Checkk: Verify Selection"
+      },
+      {
+        "command": "doublecheckk.configureApi",
+        "title": "Double-Checkk: Configure API…"
       }
     ],
     "menus": {
+      "commandPalette": [
+        {
+          "command": "doublecheckk.configureApi",
+          "when": "true"
+        }
+      ],
       "editor/context": [
         {
           "command": "doublecheckk.verifySelection",
-          "when": "editorHasSelection"
+          "when": "editorHasSelection",
+          "group": "navigation"
         }
       ]
+    },
+    "keybindings": [
+      {
+        "command": "doublecheckk.verifySelection",
+        "key": "ctrl+alt+v",
+        "when": "editorTextFocus && editorHasSelection"
+      }
+    ],
+    "configuration": {
+      "title": "Double-Checkk",
+      "properties": {
+        "doublecheckk.provider": {
+          "type": "string",
+          "enum": [
+            "openai",
+            "anthropic",
+            "google"
+          ],
+          "default": "openai",
+          "description": "LLM provider to use."
+        },
+        "doublecheckk.apiKey": {
+          "type": "string",
+          "default": "",
+          "description": "(Legacy) API key. New installs store keys securely in the VS Code Secret Storage.",
+          "markdownDescription": "Deprecated: Keys are now stored securely via Secret Storage. Only used as fallback."
+        }
+      }
     }
   },
   "scripts": {
