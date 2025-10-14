@@ -27,5 +27,6 @@ clightgen -normalize -o vst_test1.v test.c
 
 # Frama Setup
 opam install frama-c alt-ergo
-frama-c -wp -wp-status-all -wp-rte -wp-prover alt-ergo frama_test_max_array.c
+little problems: frama-c -wp -wp-status-all -wp-rte -wp-prover z3 frama_test_max_array.c
+big boy problems: frama-c -wp -wp-rte -wp-prover z3,alt-ergo,cvc5 -wp-par 4 -wp-timeout 15 frama_test3_fac2.c
 (Currently testing this benchmark: https://github.com/cverified/cbench)

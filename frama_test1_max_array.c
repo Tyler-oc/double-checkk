@@ -1,5 +1,3 @@
-#include <stdio.h>
-
 /*@
   requires length > 0;
   requires \valid_read(arr + (0..length-1));
