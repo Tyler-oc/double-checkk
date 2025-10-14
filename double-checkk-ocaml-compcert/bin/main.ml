@@ -15,7 +15,12 @@ let () =
         Dream.json ~status:`OK {|{ "compiles": false }|}
     )
     Dream.post "/verify-frama-c" (fun request ->
-      let* body = Dream.body request in
+    let* payload = Dream.body request in
+    let json = Yojson.Safe.from_string payload in
+    let open Yojson.Safe.Util in
+    let source = json |> member "body" |> to_string in
+    let specs = json |> member "specs" |> to_string in
+    let body = (source, specs) in
       let result, valid = Frama_c_wrapper.verify body in
       if valid then
         Dream.json ~status:`OK {|{ "valid": true, "result": result }|}

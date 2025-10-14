@@ -1,5 +1,9 @@
 #include <stdio.h>
 
+int find_max(int arr[])
+{
+}
+
 int is_greater(int a, int b)
 {
     return a > b;
