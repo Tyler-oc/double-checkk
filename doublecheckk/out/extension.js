@@ -142,12 +142,13 @@ function runPythonScript(scriptPath, code, apiKey) {
         throw new Error("API key not configured");
     return new Promise((resolve, reject) => {
         const proc = cp.spawn("python", [scriptPath, apiKey], {
-            stdio: ["pipe", "pipe", "inherit"],
+            stdio: ["pipe", "pipe", "pipe"],
         });
         proc.stdin.write(code);
         proc.stdin.end();
         let output = "";
         proc.stdout.on("data", (data) => (output += data.toString()));
+        proc.stderr?.on("data", (data) => (output += data.toString()));
         proc.on("close", () => {
             try {
                 const parsed = JSON.parse(output);
