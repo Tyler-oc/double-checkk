@@ -18,28 +18,29 @@ def extract_code_from_response(response):
     else:
         return None
 
-def call_llm(prompt, user_api_key, api_provider):
+
+def call_llm(chat_log, user_api_key, api_provider):
     if not user_api_key:
         return False
-
-
+    
     if api_provider == "anthropic":
-        client = Anthropic(
-            api_key=user_api_key
-        )
+        client = Anthropic(api_key=user_api_key)
+        messages = []
+        for i, content in enumerate(chat_log):
+            role = "user" if i % 2 == 0 else "assistant"
+            messages.append({"role": role, "content": content})
+        
         response = client.messages.create(
             model="claude-sonnet-4-5-20250929",
             max_tokens=10000,
-            messages=[
-                {"role": "user", "content": prompt}
-            ]
-        ).content[0].text 
+            messages=messages
+        ).content[0].text
 
     if api_provider == "openai":
         openai.api_key = user_api_key
         formatted_response = openai.Completion.create(
             model="gpt-5-2025-08-07",
-            prompt=prompt,
+            prompt=chat_log, #TODO
             max_tokens=10000,
             n=1
         )
@@ -48,7 +49,7 @@ def call_llm(prompt, user_api_key, api_provider):
     if api_provider == "google":
         genai.configure(api_key=user_api_key)
         model = genai.GenerativeModel('gemini-2.5-pro')
-        response = model.generate_content(prompt).text 
+        response = model.generate_content(chat_log).text #TODO
 
     return response
 
@@ -66,13 +67,23 @@ def verify_c_code(user_code, user_api_key, api_provider: str) -> bool:
 
         Example 4 ACSL Professional Coding Agent Output: [[[UNVERIFIABLE: recursive calls were made unguarded. Passing j - m + 1 or n - i + 1 could become 0 or negative.]]]
 
-        You are an expert in Frama-C/ACSL. Please verify my code (attached below) using ACSL specifications. Refer to the above examples as a guide. You may think before outputting your code but when you are done, output the full code enclosed by 3 brackets (it will be extracted and the proof will be automatically run). If the code is unverifiable (ie. because the function has an error or hole) simply write unverifiable followed by a small explanation within the brackets. I am sending you the code to be verified, it is most important that you do not change any part of the code. You must only write ACSL on top of the already implemented code. Now, here is the code to be verified: [[[
+        You are an expert in Frama-C/ACSL. Please verify my code (attached below) 
+        using ACSL specifications. Refer to the above examples as a guide. You may 
+        think before outputting your code but when you are done, output the full code 
+        enclosed by 3 brackets (it will be extracted and the proof will be automatically 
+        run). If the code is unverifiable (ie. because the function has an error or hole) 
+        simply write unverifiable followed by a small explanation within the brackets. I am 
+        sending you the code to be verified, it is most important that you do not change any 
+        part of the code. You must only write ACSL on top of the already implemented code. 
+        Now, here is the code to be verified: [[[
         """ + user_code + """]]] """
     
     num_trials = 6
-    chat_log = prompt
-    for i in range(num_trials):
-        response = call_llm(prompt, user_api_key, api_provider)
+    chat_log = []
+    chat_log.append(prompt)
+    for trial in range(num_trials):
+        response = call_llm(chat_log, user_api_key, api_provider)
+        chat_log.append(response)
         extracted_code = extract_code_from_response(response)
         if "unverifiable" in extracted_code.lower():
             return {"valid": False, "frama": extracted_code}
@@ -92,16 +103,10 @@ def verify_c_code(user_code, user_api_key, api_provider: str) -> bool:
                 '-wp-prover', 'z3',
                 tmp_filename
             ]
-            
-            result = subprocess.run(
-                cmd,
-                capture_output=True,
-                text=True,
-                timeout=60
-            )
             result = subprocess.run(cmd, capture_output=True, text=True, timeout=60)
-            
-
+            if result.returncode == 0:
+                return {"valid": True, "frama": extracted_code}
+            chat_log.append(result)
 
     return {"valid": False, "frama": "Max tries exceeded."}
 
