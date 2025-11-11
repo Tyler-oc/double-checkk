@@ -37,6 +37,7 @@ exports.activate = activate;
 const vscode = __importStar(require("vscode"));
 const cp = __importStar(require("child_process"));
 const path = __importStar(require("path"));
+const outputChannel = vscode.window.createOutputChannel("Python-debug");
 const PROVIDERS = [
     { id: "openai", label: "OpenAI (ChatGPT)" },
     { id: "anthropic", label: "Anthropic (Claude)" },
@@ -147,8 +148,8 @@ function runPythonScript(scriptPath, code, apiKey) {
         proc.stdin.write(code);
         proc.stdin.end();
         let output = "";
-        proc.stdout.on("data", (data) => (output += data.toString()));
-        proc.stderr?.on("data", (data) => (output += data.toString()));
+        proc.stdout.on("data", (data) => outputChannel.append(data.toString()));
+        proc.stderr?.on("data", (data) => outputChannel.append(data.toString()));
         proc.on("close", () => {
             try {
                 const parsed = JSON.parse(output);

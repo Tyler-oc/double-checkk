@@ -2,6 +2,8 @@ import * as vscode from "vscode";
 import * as cp from "child_process";
 import * as path from "path";
 
+const outputChannel = vscode.window.createOutputChannel("Python-debug");
+
 type ProviderId = "openai" | "anthropic" | "google";
 const PROVIDERS: { id: ProviderId; label: string }[] = [
   { id: "openai", label: "OpenAI (ChatGPT)" },
@@ -172,8 +174,8 @@ function runPythonScript(
     proc.stdin.end();
 
     let output = "";
-    proc.stdout.on("data", (data) => (output += data.toString()));
-    proc.stderr?.on("data", (data) => (output += data.toString()));
+    proc.stdout.on("data", (data) => outputChannel.append(data.toString()));
+    proc.stderr?.on("data", (data) => outputChannel.append(data.toString()));
     proc.on("close", () => {
       try {
         const parsed = JSON.parse(output);
