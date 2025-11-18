@@ -12,6 +12,7 @@ node_modules/
 #ocaml
 # Dune build artifacts
 _build/
+.env
 
 # Local opam switch (if used)
 _opam/
