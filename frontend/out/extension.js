@@ -37,6 +37,8 @@ exports.activate = activate;
 const vscode = __importStar(require("vscode"));
 const cp = __importStar(require("child_process"));
 const path = __importStar(require("path"));
+const fs = __importStar(require("fs"));
+const util_1 = require("util");
 const outputChannel = vscode.window.createOutputChannel("Python-debug");
 const PROVIDERS = [
     { id: "openai", label: "OpenAI (ChatGPT)" },
@@ -44,6 +46,41 @@ const PROVIDERS = [
     { id: "google", label: "Google (Gemini)" },
 ];
 const secretKey = (p) => `doublecheckk.apiKey.${p}`;
+const execPromise = (0, util_1.promisify)(cp.exec);
+//download any dependencies the user doesn't have
+async function ensureDependencies(context) {
+    const depsPath = path.join(context.globalStorageUri.path, "python-deps");
+    const flagFile = path.join(depsPath, ".installed");
+    if (fs.existsSync(flagFile)) {
+        return depsPath;
+    }
+    return await vscode.window.withProgress({
+        location: vscode.ProgressLocation.Notification,
+        title: "Installing Python dependencies, please wait ...",
+    }, async () => {
+        try {
+            // Create the directory if it doesn't exist
+            if (!fs.existsSync(depsPath)) {
+                fs.mkdirSync(depsPath, { recursive: true });
+            }
+            const requirementsPath = path.join(context.extensionPath, "requirements.txt");
+            // Install dependencies
+            const { stdout, stderr } = await execPromise(`pip install -r "${requirementsPath}" --target "${depsPath}"`);
+            console.log("Pip stdout:", stdout);
+            if (stderr) {
+                console.log("Pip stderr:", stderr);
+            }
+            // Create flag file to mark successful installation
+            fs.writeFileSync(flagFile, new Date().toISOString());
+            return depsPath;
+        }
+        catch (error) {
+            const errorMessage = error instanceof Error ? error.message : String(error);
+            vscode.window.showErrorMessage(`Failed to install Python dependencies: ${errorMessage}`);
+            throw error;
+        }
+    });
+}
 async function configureApi(context) {
     const pick = await vscode.window.showQuickPick(PROVIDERS.map((p) => ({ label: p.label, description: p.id, id: p.id })), { placeHolder: "Select your LLM provider", ignoreFocusOut: true });
     if (!pick)
@@ -81,9 +118,18 @@ async function getProviderAndKey(context, autoConfigure = true) {
     }
     return { provider, apiKey };
 }
+let depsPathPromise;
 function activate(context) {
     vscode.window.showInformationMessage("Double-Checkk extension activated");
-    context.subscriptions.push(vscode.commands.registerCommand("doublecheckk.configureApi", () => configureApi(context)));
+    vscode.window.showInformationMessage("Verifying necessary package requirements");
+    depsPathPromise = ensureDependencies(context);
+    depsPathPromise.catch((err) => {
+        console.error("Failed to install dependencies: ", err);
+    });
+    context.subscriptions.push(vscode.commands.registerCommand("doublecheckk.configureApi", async () => {
+        const depsPath = await ensureDependencies(context);
+        configureApi(context);
+    }));
     context.subscriptions.push(vscode.commands.registerCommand("doublecheckk.verifySelection", async () => {
         const editor = vscode.window.activeTextEditor;
         if (!editor) {
@@ -101,7 +147,8 @@ function activate(context) {
         vscode.window.showInformationMessage("Verifying selection…");
         try {
             const pyPath = context.asAbsolutePath(path.join("python_scripts", "frama_c.py"));
-            const result = await runPythonScript(pyPath, selection, creds.provider, creds.apiKey);
+            const depsPath = await depsPathPromise;
+            const result = await runPythonScript(pyPath, selection, creds.provider, creds.apiKey, depsPath);
             const action = await vscode.window.showInformationMessage(result.valid
                 ? "✅ Code successfully validated!"
                 : "❌ Could not validate code.", "Show details");
@@ -138,9 +185,13 @@ function activate(context) {
         }
     })(), { providedCodeActionKinds: [vscode.CodeActionKind.QuickFix] }));
 }
-function runPythonScript(scriptPath, code, provider, apiKey) {
+function runPythonScript(scriptPath, code, provider, apiKey, depsPath) {
     if (!apiKey)
         throw new Error("API key not configured");
+    const env = {
+        ...process.env,
+        PYTHONPATH: depsPath,
+    };
     return new Promise((resolve, reject) => {
         const proc = cp.spawn("python", [scriptPath, apiKey, provider], {
             stdio: ["pipe", "pipe", "pipe"],

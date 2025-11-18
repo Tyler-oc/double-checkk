@@ -1,6 +1,8 @@
 import * as vscode from "vscode";
 import * as cp from "child_process";
 import * as path from "path";
+import * as fs from "fs";
+import { promisify } from "util";
 
 const outputChannel = vscode.window.createOutputChannel("Python-debug");
 
@@ -12,6 +14,62 @@ const PROVIDERS: { id: ProviderId; label: string }[] = [
 ];
 
 const secretKey = (p: ProviderId) => `doublecheckk.apiKey.${p}`;
+
+const execPromise = promisify(cp.exec);
+
+//download any dependencies the user doesn't have
+async function ensureDependencies(
+  context: vscode.ExtensionContext
+): Promise<string> {
+  const depsPath = path.join(context.globalStorageUri.path, "python-deps");
+  const flagFile = path.join(depsPath, ".installed");
+
+  if (fs.existsSync(flagFile)) {
+    return depsPath;
+  }
+
+  return await vscode.window.withProgress<string>(
+    {
+      location: vscode.ProgressLocation.Notification,
+      title: "Installing Python dependencies, please wait ...",
+    },
+    async () => {
+      try {
+        // Create the directory if it doesn't exist
+        if (!fs.existsSync(depsPath)) {
+          fs.mkdirSync(depsPath, { recursive: true });
+        }
+
+        const requirementsPath = path.join(
+          context.extensionPath,
+          "requirements.txt"
+        );
+
+        // Install dependencies
+        const { stdout, stderr } = await execPromise(
+          `pip install -r "${requirementsPath}" --target "${depsPath}"`
+        );
+
+        console.log("Pip stdout:", stdout);
+        if (stderr) {
+          console.log("Pip stderr:", stderr);
+        }
+
+        // Create flag file to mark successful installation
+        fs.writeFileSync(flagFile, new Date().toISOString());
+
+        return depsPath;
+      } catch (error) {
+        const errorMessage =
+          error instanceof Error ? error.message : String(error);
+        vscode.window.showErrorMessage(
+          `Failed to install Python dependencies: ${errorMessage}`
+        );
+        throw error;
+      }
+    }
+  );
+}
 
 async function configureApi(context: vscode.ExtensionContext) {
   const pick = await vscode.window.showQuickPick(
@@ -62,13 +120,24 @@ async function getProviderAndKey(
   return { provider, apiKey };
 }
 
+let depsPathPromise: Promise<string>;
+
 export function activate(context: vscode.ExtensionContext) {
   vscode.window.showInformationMessage("Double-Checkk extension activated");
 
+  vscode.window.showInformationMessage(
+    "Verifying necessary package requirements"
+  );
+  depsPathPromise = ensureDependencies(context);
+  depsPathPromise.catch((err) => {
+    console.error("Failed to install dependencies: ", err);
+  });
+
   context.subscriptions.push(
-    vscode.commands.registerCommand("doublecheckk.configureApi", () =>
-      configureApi(context)
-    )
+    vscode.commands.registerCommand("doublecheckk.configureApi", async () => {
+      const depsPath = await ensureDependencies(context);
+      configureApi(context);
+    })
   );
 
   context.subscriptions.push(
@@ -96,11 +165,13 @@ export function activate(context: vscode.ExtensionContext) {
             path.join("python_scripts", "frama_c.py")
           );
 
+          const depsPath = await depsPathPromise;
           const result = await runPythonScript(
             pyPath,
             selection,
             creds.provider,
-            creds.apiKey
+            creds.apiKey,
+            depsPath
           );
 
           const action = await vscode.window.showInformationMessage(
@@ -169,9 +240,15 @@ function runPythonScript(
   scriptPath: string,
   code: string,
   provider: ProviderId,
-  apiKey: string
+  apiKey: string,
+  depsPath: string
 ): Promise<{ valid: boolean; frama?: string }> {
   if (!apiKey) throw new Error("API key not configured");
+  const env = {
+    ...process.env,
+    PYTHONPATH: depsPath,
+  };
+
   return new Promise((resolve, reject) => {
     const proc = cp.spawn("python", [scriptPath, apiKey, provider], {
       stdio: ["pipe", "pipe", "pipe"],
