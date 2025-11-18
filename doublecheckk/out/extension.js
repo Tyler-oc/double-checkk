@@ -101,7 +101,7 @@ function activate(context) {
         vscode.window.showInformationMessage("Verifying selection…");
         try {
             const pyPath = context.asAbsolutePath(path.join("python_scripts", "frama_c.py"));
-            const result = await runPythonScript(pyPath, selection, creds.apiKey);
+            const result = await runPythonScript(pyPath, selection, creds.provider, creds.apiKey);
             const action = await vscode.window.showInformationMessage(result.valid
                 ? "✅ Code successfully validated!"
                 : "❌ Could not validate code.", "Show details");
@@ -138,21 +138,31 @@ function activate(context) {
         }
     })(), { providedCodeActionKinds: [vscode.CodeActionKind.QuickFix] }));
 }
-function runPythonScript(scriptPath, code, apiKey) {
+function runPythonScript(scriptPath, code, provider, apiKey) {
     if (!apiKey)
         throw new Error("API key not configured");
     return new Promise((resolve, reject) => {
-        const proc = cp.spawn("python", [scriptPath, apiKey], {
+        const proc = cp.spawn("python", [scriptPath, apiKey, provider], {
             stdio: ["pipe", "pipe", "pipe"],
         });
         proc.stdin.write(code);
         proc.stdin.end();
         let output = "";
-        proc.stdout.on("data", (data) => outputChannel.append(data.toString()));
-        proc.stderr?.on("data", (data) => outputChannel.append(data.toString()));
+        proc.stdout.on("data", (data) => {
+            outputChannel.append(data.toString());
+            output += data.toString();
+            console.log("Received data:", data.toString());
+        });
+        proc.stderr?.on("data", (data) => {
+            outputChannel.append(data.toString());
+            output += data.toString();
+            console.error("Received error data:", data.toString());
+        });
         proc.on("close", () => {
             try {
+                outputChannel.show(true);
                 const parsed = JSON.parse(output);
+                console.log("Parsed output:", parsed);
                 resolve({
                     valid: !!parsed.valid,
                     frama: typeof parsed.frama === "string" ? parsed.frama : undefined,
