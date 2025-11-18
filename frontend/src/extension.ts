@@ -21,7 +21,7 @@ const execPromise = promisify(cp.exec);
 async function ensureDependencies(
   context: vscode.ExtensionContext
 ): Promise<string> {
-  const depsPath = path.join(context.globalStorageUri.path, "python-deps");
+  const depsPath = path.join(context.globalStorageUri.fsPath, "python-deps");
   const flagFile = path.join(depsPath, ".installed");
 
   if (fs.existsSync(flagFile)) {
@@ -252,6 +252,7 @@ function runPythonScript(
   return new Promise((resolve, reject) => {
     const proc = cp.spawn("python", [scriptPath, apiKey, provider], {
       stdio: ["pipe", "pipe", "pipe"],
+      env: env,
     });
     proc.stdin.write(code);
     proc.stdin.end();

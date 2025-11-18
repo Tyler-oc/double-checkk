@@ -1,12 +1,9 @@
 import sys
 import os
-
-# import bundled python files
-script_dir = os.path.dirname(os.path.abspath(__file__))
-sys.path.insert(0, os.path.join(script_dir, "../python-libs"))
 from anthropic import Anthropic
 import openai
-from google import genai
+
+# from google import genai
 import re
 import subprocess
 import json
@@ -73,14 +70,14 @@ def call_llm(chat_log, user_api_key, api_provider: str):
             dprint(f"openai: got response_len={len(text)}")
             return text
 
-        elif api_provider == "google":
-            genai.configure(api_key=user_api_key)
-            model = genai.GenerativeModel("gemini-2.5-pro")
-            dprint("google: sending prompt as single string")
-            out = model.generate_content("\n\n".join(map(str, chat_log)))
-            text = getattr(out, "text", "") or ""
-            dprint(f"google: got response_len={len(text)}")
-            return text
+        # elif api_provider == "google":
+        #     genai.configure(api_key=user_api_key)
+        #     model = genai.GenerativeModel("gemini-2.5-pro")
+        #     dprint("google: sending prompt as single string")
+        #     out = model.generate_content("\n\n".join(map(str, chat_log)))
+        #     text = getattr(out, "text", "") or ""
+        #     dprint(f"google: got response_len={len(text)}")
+        #     return text
 
         else:
             dprint(f"unknown provider: {api_provider}")

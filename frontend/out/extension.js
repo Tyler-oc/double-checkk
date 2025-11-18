@@ -49,7 +49,7 @@ const secretKey = (p) => `doublecheckk.apiKey.${p}`;
 const execPromise = (0, util_1.promisify)(cp.exec);
 //download any dependencies the user doesn't have
 async function ensureDependencies(context) {
-    const depsPath = path.join(context.globalStorageUri.path, "python-deps");
+    const depsPath = path.join(context.globalStorageUri.fsPath, "python-deps");
     const flagFile = path.join(depsPath, ".installed");
     if (fs.existsSync(flagFile)) {
         return depsPath;
@@ -195,6 +195,7 @@ function runPythonScript(scriptPath, code, provider, apiKey, depsPath) {
     return new Promise((resolve, reject) => {
         const proc = cp.spawn("python", [scriptPath, apiKey, provider], {
             stdio: ["pipe", "pipe", "pipe"],
+            env: env,
         });
         proc.stdin.write(code);
         proc.stdin.end();
