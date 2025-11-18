@@ -21,14 +21,14 @@ def dprint(msg: str):
 
 def extract_code_from_response(response: str):
     dprint(
-        f"extract_code_from_response: response_len={len(response) if response is not None else 'None'}"
+        f"extract_code_from_response: response_len={response if response is not None else 'None'}"
     )
     if response is None:
         return None
     m = re.search(r"\[\[\[(.*?)\]\]\]", response, re.DOTALL)
     if m:
         code = m.group(1).strip()
-        dprint(f"extracted ACSL/C block, len={len(code)}")
+        dprint(f"extracted ACSL/C block, len={code}")
         return code
     dprint("no [[[...]]] block found in response")
     return None
@@ -36,7 +36,7 @@ def extract_code_from_response(response: str):
 
 def call_llm(chat_log, user_api_key, api_provider: str):
     dprint(
-        f"call_llm: provider={api_provider}, msgs={len(chat_log)}, api_key_len={len(user_api_key) if user_api_key else 0}"
+        f"call_llm: provider={api_provider}, msgs={chat_log}, api_key_len={len(user_api_key) if user_api_key else 0}"
     )
     if not user_api_key:
         dprint("missing api key")
