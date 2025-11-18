@@ -10,8 +10,6 @@
     "Other"
   ],
   "activationEvents": [
-    "onCommand:doublecheckk.verifySelection",
-    "onCommand:doublecheckk.configureApi"
   ],
   "main": "./out/extension.js",
   "contributes": {

@@ -1,8 +1,12 @@
 import sys
 import os
+
+# import bundled python files
+script_dir = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, os.path.join(script_dir, "../python-libs"))
 from anthropic import Anthropic
-#import openai
-#from google import genai
+import openai
+from google import genai
 import re
 import subprocess
 import json
