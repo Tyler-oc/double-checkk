@@ -181,26 +181,13 @@ def main():
     # Support two modes:
     # 1) argv: script code api_key provider
     # 2) argv: script api_key provider, code on stdin (recommended for long inputs)
-    if len(sys.argv) == 4:
-        c_code = sys.argv[1]
-        api_key = sys.argv[2]
-        api_provider = sys.argv[3]
-        dprint("mode: argv includes code")
-    elif len(sys.argv) == 3:
-        api_key = sys.argv[1]
-        api_provider = sys.argv[2]
-        dprint("mode: reading code from stdin")
-        c_code = sys.stdin.read()
-    else:
-        print(
-            json.dumps(
-                {
-                    "valid": False,
-                    "error": "usage: frama_c.py <code>|<stdin> <api_key> <provider>",
-                }
-            )
-        )
+    if len(sys.argv) != 3:
+        dprint("WRONG!!!!")
         sys.exit(1)
+    api_key = sys.argv[1]
+    api_provider = sys.argv[2]
+    dprint("mode: reading code from stdin")
+    c_code = sys.stdin.read()
 
     dprint(
         f"provider={api_provider}, api_key_len={len(api_key) if api_key else 0}, code_len={len(c_code)}"
