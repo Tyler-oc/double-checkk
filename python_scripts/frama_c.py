@@ -1,8 +1,8 @@
 import sys
 import os
 from anthropic import Anthropic
-import openai
-from google import genai
+#import openai
+#from google import genai
 import re
 import subprocess
 import json
@@ -49,7 +49,7 @@ def call_llm(chat_log, user_api_key, api_provider: str):
             dprint(f"anthropic: sending {len(messages)} messages")
             resp = client.messages.create(
                 model="claude-3-haiku-20240307",
-                max_tokens=10000,
+                max_tokens=400,
                 messages=messages,
             )
             text = resp.content[0].text if resp and resp.content else ""
