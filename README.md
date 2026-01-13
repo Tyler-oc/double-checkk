@@ -1,9 +1,7 @@
-Coq 8.19.2
-coq-compcert 3.15
-coq-vst 2.15
 frama-c.31.0
 
 # Idea:
+
 1. Take query, get response C code from LLM.
 2. Use compcert to get coq representation of C code (Clight)
 3. Try VST to verify algorithm
@@ -11,22 +9,15 @@ frama-c.31.0
 5. if this runs, it is valid code and we return it to user
 6. If it fails we retry proofs / generating code w/ max timeout. If it times out we tell the user we could not verify the code (we could still return it though).
 
-# Requirements:
-Ocaml:
--dream
--yojson
-
-# Get into Environment
-1. opam switch list
-2. opam switch double-check
-
-# Comp-Cert Setup
-opam install coq-compcert.3.15
-opam install coq-vst.2.15
-clightgen -normalize -o vst_test1.v test.c
-
 # Frama Setup
+
 opam install frama-c alt-ergo
 little problems: frama-c -wp -wp-status-all -wp-rte -wp-prover z3 frama_test_max_array.c
 big boy problems: frama-c -wp -wp-rte -wp-prover z3,alt-ergo,cvc5 -wp-par 4 -wp-timeout 15 frama_test3_fac2.c
 (Currently testing this benchmark: https://github.com/cverified/cbench)
+
+BE IN FRONTEND FOLDER
+npm run watch
+
+In extension.ts
+f5
