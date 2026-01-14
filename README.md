@@ -16,8 +16,14 @@ little problems: frama-c -wp -wp-status-all -wp-rte -wp-prover z3 frama_test_max
 big boy problems: frama-c -wp -wp-rte -wp-prover z3,alt-ergo,cvc5 -wp-par 4 -wp-timeout 15 frama_test3_fac2.c
 (Currently testing this benchmark: https://github.com/cverified/cbench)
 
-BE IN FRONTEND FOLDER
-npm run watch
+# BE IN FRONTEND FOLDER
+npm ci;
 
-In extension.ts
+npm run watch;
+
+In src/extension.ts
 f5
+
+
+
+
