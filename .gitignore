@@ -47,10 +47,6 @@ esy.lock/
 # Windows
 Thumbs.db
 
-
-**.tar.gz
-CompCert-3.15/
-
 # Ignore Python virtual environments
 double-check-venv/
 
