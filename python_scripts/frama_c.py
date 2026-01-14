@@ -123,8 +123,9 @@ def verify_c_code(user_code: str, user_api_key: str, api_provider: str):
     )
     if not user_code:
         return {"valid": False, "error": "empty code"}
-
-    with open(prompt.txt, 'r') as f:
+    
+    prompt = ""
+    with open("prompt.txt", 'r') as f:
         prompt = f.read()
     dprint(f"prompt_len={len(prompt)}")
 
