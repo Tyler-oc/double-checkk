@@ -17,10 +17,12 @@ big boy problems: frama-c -wp -wp-rte -wp-prover z3,alt-ergo,cvc5 -wp-par 4 -wp-
 (Currently testing this benchmark: https://github.com/cverified/cbench)
 
 # BE IN FRONTEND FOLDER
-npm ci \\
-npm run watch
+npm ci;
+
+npm run watch;
 
 In extension.ts
 f5
+
 
 
