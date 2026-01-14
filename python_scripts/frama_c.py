@@ -124,10 +124,30 @@ def verify_c_code(user_code: str, user_api_key: str, api_provider: str):
     if not user_code:
         return {"valid": False, "error": "empty code"}
     
-    prompt = ""
-    with open("./prompt.txt", 'r') as f:
-        prompt = f.read()
-    dprint(f"prompt_len={len(prompt)}")
+    prompt = """
+Example 1 ACSL Professional Coding Agent Output: [[[/*@ requires length > 0; requires \valid_read(arr + (0..length-1)); assigns \nothing; ensures \exists integer k; 0 <= k < length && \result == arr[k]; ensures \forall integer i; 0 <= i < length ==> \result >= arr[i]; */ int find_max(int arr[], int length) { int max = arr[0]; /*@ loop invariant 0 <= i <= length; loop invariant \forall integer j; 0 <= j < i ==> max >= arr[j]; loop invariant \exists integer k; 0 <= k < length && max == arr[k]; loop assigns i, max; loop variant length - i; */ for(int i = 1; i < length; i++) { if (arr[i] > max) { max = arr[i]; } } return max; } /*@ assigns \nothing; */ int main() { int arr[] = {1, 2, 4, 2, 8, 3}; int length = 6; int result = find_max(arr, length); return 0; } ]]]
+
+Example 2 ACSL Professional Coding Agent Output: [[[/*@ logic integer factorial(integer n) = (n <= 0) ? 1 : n * factorial(n - 1); */ /*@ requires n >= 0; requires n <= 12; assigns \nothing; ensures \result == factorial(n); */ int compute_factorial(int n) { int i, f; f = 1; /*@ loop invariant 1 <= i <= n + 1; loop invariant f == factorial(i - 1); loop invariant f >= 1; loop invariant 1 <= i <= 13; loop invariant i == 1 ==> f == 1; loop invariant i == 2 ==> f == 1; loop invariant i == 3 ==> f == 2; loop invariant i == 4 ==> f == 6; loop invariant i == 5 ==> f == 24; loop invariant i == 6 ==> f == 120; loop invariant i == 7 ==> f == 720; loop invariant i == 8 ==> f == 5040; loop invariant i == 9 ==> f == 40320; loop invariant i == 10 ==> f == 362880; loop invariant i == 11 ==> f == 3628800; loop invariant i == 12 ==> f == 39916800; loop invariant i == 13 ==> f == 479001600; loop assigns i, f; loop variant n - i + 1; */ for (i = 1; i <= n; i++) f = f * i; return f; } /*@ assigns \nothing; */ int main() { int n = 5, i, f; f = 1; /*@ loop invariant 1 <= i <= n + 1; loop invariant f == factorial(i - 1); loop invariant f >= 1; loop invariant i == 1 ==> f == 1; loop invariant i == 2 ==> f == 1; loop invariant i == 3 ==> f == 2; loop invariant i == 4 ==> f == 6; loop invariant i == 5 ==> f == 24; loop invariant i == 6 ==> f == 120; loop assigns i, f; loop variant n - i + 1; */ for (i = 1; i <= n; i++) f = f * i; return f; } ]]]
+
+Example 3 ACSL Professional Coding Agent Output: [[[ /*@ logic integer factorial(integer n) = (n <= 0) ? 1 : n * factorial(n - 1); */ /*@ assigns \nothing; ensures \result == factorial(5); */ int main() { int s, r, n = 5, u, v; /* keep an explicit runtime/verification check for n bounds */ /*@ assert 0 <= n <= 12; */ /* Outer loop: - r runs from 1 up to n-1, - u == factorial(r) at loop head */ /*@ loop invariant 1 <= r <= n; loop invariant u == factorial(r); loop assigns r, s, u, v; loop variant n - r; */ for (u = r = 1; r < n; r++) { v = u; /* Inner loop rewritten as a simple counting loop: u += v executed r times */ /*@ loop invariant 0 <= s <= r; loop invariant u == v * (s + 1); loop assigns s, u; loop variant r - s; */ for (s = 0; s < r; ++s) { u += v; } /* now u == v * (r + 1) == factorial(r+1) */ /*@ assert u == factorial(r + 1); */ } return u; } ]]] 
+
+Example 4 ACSL Professional Coding Agent Output: [[[UNVERIFIABLE: recursive calls were made unguarded. Passing j - m + 1 or n - i + 1 could become 0 or negative.]]]
+
+You are an expert in Frama-C/ACSL. Please verify my code (attached below)
+ using ACSL specifications. Refer to the above examples as a guide. 
+ You may think before outputting your code but when you are done, 
+ output the full code enclosed by 3 brackets (it will be extracted 
+ and the proof will be automatically run). If the code is unverifiable 
+ (ie. because the function has an error or hole) simply write unverifiable
+  followed by a small explanation within the brackets. I am sending you the
+   code to be verified, it is most important that you do not modify any part
+    of the code. If the code is unverifiable (ie. bad code/ bad specification) simply say '!!i give up!!'. 
+    You must only write ACSL on top of the already implemented code, 
+    and wrap the code in any function / include statements necessary to create a valid c program.
+It is vital that the generated code compiles to a valid C program.
+     Now, here is the code to be verified: [[[
+""" + user_code + """]]]
+"""
 
     chat_log = [prompt]
     max_trials = 6
