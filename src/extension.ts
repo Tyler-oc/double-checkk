@@ -176,8 +176,8 @@ export function activate(context: vscode.ExtensionContext) {
 
           const action = await vscode.window.showInformationMessage(
             result.valid
-              ? "✅ Code successfully validated!"
-              : "❌ Could not validate code.",
+              ? "Code successfully validated"
+              : "Could not validate code.",
             "Show details"
           );
 

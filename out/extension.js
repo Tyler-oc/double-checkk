@@ -150,8 +150,8 @@ function activate(context) {
             const depsPath = await depsPathPromise;
             const result = await runPythonScript(pyPath, selection, creds.provider, creds.apiKey, depsPath);
             const action = await vscode.window.showInformationMessage(result.valid
-                ? "✅ Code successfully validated!"
-                : "❌ Could not validate code.", "Show details");
+                ? "Code successfully validated"
+                : "Could not validate code.", "Show details");
             if (action === "Show details") {
                 const framaText = result.frama && result.frama.trim().length > 0
                     ? result.frama
