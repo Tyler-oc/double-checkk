@@ -21,8 +21,9 @@ npm ci;
 
 npm run watch;
 
-In extension.ts
+In src/extension.ts
 f5
+
 
 
 
