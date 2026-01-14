@@ -14,7 +14,8 @@ You are an expert in Frama-C/ACSL. Please verify my code (attached below)
  (ie. because the function has an error or hole) simply write unverifiable
   followed by a small explanation within the brackets. I am sending you the
    code to be verified, it is most important that you do not modify any part
-    of the code. You must only write ACSL on top of the already implemented code, 
+    of the code. If the code is unverifiable (ie. bad code/ bad specification) simply say '!!i give up!!'. 
+    You must only write ACSL on top of the already implemented code, 
     and wrap the code in any function / include statements necessary to create a valid c program.
 It is vital that the generated code compiles to a valid C program.
      Now, here is the code to be verified: [[[

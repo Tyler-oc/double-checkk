@@ -100,20 +100,21 @@ def run_frama_c(c_path: str, extra_args=None, timeout_sec=60):
         dprint(
             f"frama-c: rc={result.returncode}, elapsed={dur:.2f}s, stdout_len={len(result.stdout)}, stderr_len={len(result.stderr)}"
         )
+        full_output = (result.stdout or "") + "\n" + (result.stderr or "")
         if result.stdout:
             dprint("frama-c stdout (first 500 chars):\n" + result.stdout[:500])
         if result.stderr:
             dprint("frama-c stderr (first 500 chars):\n" + result.stderr[:500])
-        return result.returncode == 0
+        return result.returncode == 0, full_output
     except subprocess.TimeoutExpired as e:
         dprint(f"frama-c timeout after {timeout_sec}s")
-        return False
+        return False, "Frama-C execution timed out."
     except FileNotFoundError:
         dprint("frama-c not found on PATH")
-        return False
+        return False, "Frama-C executable not found."
     except Exception as e:
         dprint(f"frama-c failed: {e}")
-        return False
+        return False, str(e)
 
 
 def verify_c_code(user_code: str, user_api_key: str, api_provider: str):
@@ -123,12 +124,8 @@ def verify_c_code(user_code: str, user_api_key: str, api_provider: str):
     if not user_code:
         return {"valid": False, "error": "empty code"}
 
-    prompt = (
-        "You are an expert in Frama-C/ACSL. Please verify my code using ACSL.\n"
-        "Return ONLY the full C file with ACSL inline, enclosed by triple brackets [[[...]]].\n"
-        "Do not modify function bodies; add annotations/contracts only.\n"
-        "Here is the code to be verified: [[[\n" + user_code + "\n]]]\n"
-    )
+    with open(prompt.txt, 'r') as f:
+        prompt = f.read()
     dprint(f"prompt_len={len(prompt)}")
 
     chat_log = [prompt]
@@ -149,7 +146,7 @@ def verify_c_code(user_code: str, user_api_key: str, api_provider: str):
             chat_log.append("Please return ONLY full C+ACSL inside [[[...]]].")
             continue
 
-        if "unverifiable" in extracted_code.lower():
+        if "!!i give up!!" in extracted_code.lower():
             dprint("trial: LLM marked code as unverifiable")
             return {"valid": False}
 
@@ -159,7 +156,7 @@ def verify_c_code(user_code: str, user_api_key: str, api_provider: str):
             tmp_path = tmp.name
         dprint(f"wrote temp C file: {tmp_path} (len={len(extracted_code)})")
 
-        ok = run_frama_c(tmp_path)
+        ok, frama_output = run_frama_c(tmp_path)
         try:
             os.remove(tmp_path)
             dprint(f"deleted temp file: {tmp_path}")
@@ -171,7 +168,11 @@ def verify_c_code(user_code: str, user_api_key: str, api_provider: str):
             return {"valid": True}
         else:
             dprint("verification failed; continuing to next trial")
-            chat_log.append("Frama-C failed; please adjust annotations and try again.")
+            chat_log.append(
+                f"Frama-C verification failed.\n"
+                f"Here is the output from Frama-C:\n{frama_output}\n\n"
+                f"Please analyze these errors, adjust the ACSL annotations, and try again."
+            )
 
     dprint("max trials exceeded")
     return {"valid": False}
