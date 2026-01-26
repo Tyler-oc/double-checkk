@@ -1,6 +1,6 @@
 # What is double checkk?
 
-Double checkk is a VS code extension designed to ensure your C code works perfectly using Frama-C. To do this, double-checkk takes your code, and uses whatever LLM you choose to annotate your code in Frama-C. If it doesn't compile, then you can see exactly where it went wrong and rewrite your code if you so choose. If it compiles, then you can gaurantee your code is up to the specs that you desire.
+Double checkk is a VS code extension designed to ensure your C code works perfectly using Frama-C. To do this, double-checkk takes your code, and uses whatever LLM you choose to annotate your code in Frama-C. If it doesn't compile, then you can see exactly where it went wrong and rewrite your code if you so choose. If it compiles, then you have formally verified your code to the specs provided.
 
 # requirement
 frama-c.31.0
@@ -19,6 +19,7 @@ npm run watch;
 
 In src/extension.ts
 f5
+
 
 
 
