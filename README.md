@@ -7,9 +7,12 @@ frama-c.31.0
 
 # Frama Setup
 
-opam install frama-c alt-ergo
+opam install frama-c alt-ergo 
+
 little problems: frama-c -wp -wp-status-all -wp-rte -wp-prover z3 frama_test_max_array.c
+
 big boy problems: frama-c -wp -wp-rte -wp-prover z3,alt-ergo,cvc5 -wp-par 4 -wp-timeout 15 frama_test3_fac2.c
+
 (Currently testing this benchmark: https://github.com/cverified/cbench)
 
 # BE IN FRONTEND FOLDER
@@ -19,6 +22,7 @@ npm run watch;
 
 In src/extension.ts
 f5
+
 
 
 
