@@ -37,56 +37,55 @@ async function installFrama(): Promise<boolean> {
   if (commandExists("frama-c")) {
     console.log("Frama-C already installed");
     return true;
-  } else {
-    const result = await vscode.window.showQuickPick(["Yes", "No"], {
-      placeHolder: "Frama-c not found on device, would you like to install it?",
-    });
+  }
 
-    if (result && result == "No") {
-      vscode.window.showInformationMessage("Exiting double checkk");
-      exit(0);
-    } else if (!result) {
-      vscode.window.showInformationMessage("No result found");
-      exit(0);
-    }
+  const result = await vscode.window.showQuickPick(["Yes", "No"], {
+    placeHolder: "Frama-C not found. Would you like to install it?",
+  });
+
+  // If user picks "No" or clicks away (undefined)
+  if (result !== "Yes") {
+    vscode.window.showInformationMessage(
+      "Installation cancelled. Frama-C is required for this feature.",
+    );
+    return false; // This tells the caller to stop
   }
 
   const platform = os.platform();
 
   try {
     if (platform === "darwin") {
-      // macOS (Homebrew)
-      if (!commandExists("brew")) {
+      if (!commandExists("brew"))
         throw new Error("Homebrew is required on macOS");
-      }
-      cp.execSync("brew update", { stdio: "inherit" });
-      cp.execSync("brew install frama-c", { stdio: "inherit" });
+      cp.execSync("brew update && brew install frama-c", { stdio: "inherit" });
     } else if (platform === "linux") {
-      // Linux (best effort)
       if (commandExists("apt")) {
-        cp.execSync("sudo apt update", { stdio: "inherit" });
-        cp.execSync("sudo apt install -y frama-c", { stdio: "inherit" });
+        cp.execSync("sudo apt update && sudo apt install -y frama-c", {
+          stdio: "inherit",
+        });
       } else if (commandExists("dnf")) {
         cp.execSync("sudo dnf install -y frama-c", { stdio: "inherit" });
       } else if (commandExists("pacman")) {
         cp.execSync("sudo pacman -S --noconfirm frama-c", { stdio: "inherit" });
       } else {
-        throw new Error("Unsupported Linux package manager");
+        throw new Error(
+          "Unsupported Linux package manager. Please install frama-c manually.",
+        );
       }
     } else if (platform === "win32") {
-      //not available on windows
       throw new Error(
-        "Frama-C is not officially supported on Windows.\n" +
-          "Use WSL (Ubuntu) and install via apt instead.",
+        "Frama-C is not officially supported on Windows. Use WSL (Ubuntu).",
       );
     } else {
       throw new Error(`Unsupported platform: ${platform}`);
     }
 
-    console.log("Frama-C installed successfully");
+    vscode.window.showInformationMessage("Frama-C installed successfully!");
     return true;
   } catch (err) {
-    console.error(`Failed to install Frama-C ${err}`);
+    vscode.window.showErrorMessage(
+      `Failed to install Frama-C: ${err instanceof Error ? err.message : err}`,
+    );
     return false;
   }
 }
@@ -210,7 +209,7 @@ export async function activate(context: vscode.ExtensionContext) {
   const framaInstalled = await installFrama();
 
   if (!framaInstalled) {
-    exit(0);
+    return;
   }
 
   context.subscriptions.push(
