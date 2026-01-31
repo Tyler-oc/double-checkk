@@ -35,7 +35,7 @@ function commandExists(cmd: string): boolean {
 
 async function installFrama(): Promise<boolean> {
   if (commandExists("frama-c")) {
-    console.log("Frama-C already installed ✅");
+    console.log("Frama-C already installed");
     return true;
   } else {
     const result = await vscode.window.showQuickPick(["Yes", "No"], {
@@ -324,44 +324,63 @@ function runPythonScript(
   depsPath: string,
 ): Promise<{ valid: boolean; frama?: string }> {
   if (!apiKey) throw new Error("API key not configured");
-  const env = {
-    ...process.env,
-    PYTHONPATH: depsPath,
-  };
+
+  const env = { ...process.env, PYTHONPATH: depsPath };
 
   return new Promise((resolve, reject) => {
     const proc = cp.spawn("python", [scriptPath, apiKey, provider], {
       stdio: ["pipe", "pipe", "pipe"],
       env: env,
     });
+
+    // Write input to stdin
     proc.stdin.write(code);
     proc.stdin.end();
 
-    let output = "";
+    let stdoutData = "";
+    let stderrData = "";
+
     proc.stdout.on("data", (data) => {
-      outputChannel.append(data.toString());
-      output += data.toString();
-      console.log("Received data:", data.toString());
+      const str = data.toString();
+      stdoutData += str;
+      outputChannel.append(str);
     });
+
     proc.stderr?.on("data", (data) => {
-      outputChannel.append(data.toString());
-      output += data.toString();
-      console.error("Received error data:", data.toString());
+      const str = data.toString();
+      stderrData += str;
+      outputChannel.append(`[STDERR]: ${str}`);
     });
-    proc.on("close", () => {
+
+    proc.on("error", (err) => {
+      reject(new Error(`Failed to start Python process: ${err.message}`));
+    });
+
+    proc.on("close", (exitCode) => {
+      if (exitCode !== 0) {
+        console.error("Python script exited with code:", exitCode, stderrData);
+        // Fallback: even if it failed, check if "success" was printed
+        return resolve({ valid: /success/i.test(stdoutData) });
+      }
+
       try {
-        outputChannel.show(true);
-        const parsed = JSON.parse(output);
-        console.log("Parsed output:", parsed);
+        // Use regex to find the JSON block in case of leading/trailing junk text
+        const jsonMatch = stdoutData.match(/\{[\s\S]*\}/);
+        if (!jsonMatch) {
+          throw new Error("No JSON found in output");
+        }
+
+        const parsed = JSON.parse(jsonMatch[0]);
+
         resolve({
-          valid: !!parsed.valid,
+          valid: Boolean(parsed.valid),
           frama: typeof parsed.frama === "string" ? parsed.frama : undefined,
         });
-        return;
-      } catch {
-        resolve({ valid: /success/i.test(output) });
+      } catch (parseError) {
+        console.warn("JSON parse failed, checking for keyword fallback...");
+        // Final fallback to keyword detection if JSON is mangled
+        resolve({ valid: /success/i.test(stdoutData) });
       }
     });
-    proc.on("error", reject);
   });
 }
