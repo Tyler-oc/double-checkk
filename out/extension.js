@@ -47,6 +47,16 @@ const PROVIDERS = [
 ];
 const secretKey = (p) => `doublecheckk.apiKey.${p}`;
 const execPromise = (0, util_1.promisify)(cp.exec);
+async function installFrama() {
+    try {
+        console.log("Checking if frama c installed");
+        cp.execSync("frama-c --version", { stdio: "ignore" });
+        console.log("frama-c found");
+    }
+    catch (e) {
+        vscode.window.showInformationMessage("Frama-c not installed, please install before continuing", { modal: true }, "Okay");
+    }
+}
 //download any dependencies the user doesn't have
 async function ensureDependencies(context) {
     const depsPath = path.join(context.globalStorageUri.fsPath, "python-deps");

@@ -17,9 +17,23 @@ const secretKey = (p: ProviderId) => `doublecheckk.apiKey.${p}`;
 
 const execPromise = promisify(cp.exec);
 
+async function installFrama() {
+  try {
+    console.log("Checking if frama c installed");
+    cp.execSync("frama-c --version", { stdio: "ignore" });
+    console.log("frama-c found");
+  } catch (e) {
+    vscode.window.showInformationMessage(
+      "Frama-c not installed, please install before continuing",
+      { modal: true },
+      "Okay",
+    );
+  }
+}
+
 //download any dependencies the user doesn't have
 async function ensureDependencies(
-  context: vscode.ExtensionContext
+  context: vscode.ExtensionContext,
 ): Promise<string> {
   const depsPath = path.join(context.globalStorageUri.fsPath, "python-deps");
   const flagFile = path.join(depsPath, ".installed");
@@ -42,12 +56,12 @@ async function ensureDependencies(
 
         const requirementsPath = path.join(
           context.extensionPath,
-          "requirements.txt"
+          "requirements.txt",
         );
 
         // Install dependencies
         const { stdout, stderr } = await execPromise(
-          `pip install -r "${requirementsPath}" --target "${depsPath}"`
+          `pip install -r "${requirementsPath}" --target "${depsPath}"`,
         );
 
         console.log("Pip stdout:", stdout);
@@ -63,18 +77,18 @@ async function ensureDependencies(
         const errorMessage =
           error instanceof Error ? error.message : String(error);
         vscode.window.showErrorMessage(
-          `Failed to install Python dependencies: ${errorMessage}`
+          `Failed to install Python dependencies: ${errorMessage}`,
         );
         throw error;
       }
-    }
+    },
   );
 }
 
 async function configureApi(context: vscode.ExtensionContext) {
   const pick = await vscode.window.showQuickPick(
     PROVIDERS.map((p) => ({ label: p.label, description: p.id, id: p.id })),
-    { placeHolder: "Select your LLM provider", ignoreFocusOut: true }
+    { placeHolder: "Select your LLM provider", ignoreFocusOut: true },
   );
   if (!pick) return;
 
@@ -98,7 +112,7 @@ async function configureApi(context: vscode.ExtensionContext) {
 
 async function getProviderAndKey(
   context: vscode.ExtensionContext,
-  autoConfigure = true
+  autoConfigure = true,
 ): Promise<{ provider: ProviderId; apiKey: string } | null> {
   const cfg = vscode.workspace.getConfiguration("doublecheckk");
   const provider = (cfg.get("provider") as ProviderId | undefined) ?? "openai";
@@ -112,7 +126,7 @@ async function getProviderAndKey(
       return getProviderAndKey(context, /*autoConfigure*/ false);
     } else {
       vscode.window.showWarningMessage(
-        "Double-Checkk: API key not configured."
+        "Double-Checkk: API key not configured.",
       );
       return null;
     }
@@ -126,7 +140,7 @@ export function activate(context: vscode.ExtensionContext) {
   vscode.window.showInformationMessage("Double-Checkk extension activated");
 
   vscode.window.showInformationMessage(
-    "Verifying necessary package requirements"
+    "Verifying necessary package requirements",
   );
   depsPathPromise = ensureDependencies(context);
   depsPathPromise.catch((err) => {
@@ -137,7 +151,7 @@ export function activate(context: vscode.ExtensionContext) {
     vscode.commands.registerCommand("doublecheckk.configureApi", async () => {
       const depsPath = await ensureDependencies(context);
       configureApi(context);
-    })
+    }),
   );
 
   context.subscriptions.push(
@@ -162,7 +176,7 @@ export function activate(context: vscode.ExtensionContext) {
 
         try {
           const pyPath = context.asAbsolutePath(
-            path.join("python_scripts", "frama_c.py")
+            path.join("python_scripts", "frama_c.py"),
           );
 
           const depsPath = await depsPathPromise;
@@ -171,14 +185,14 @@ export function activate(context: vscode.ExtensionContext) {
             selection,
             creds.provider,
             creds.apiKey,
-            depsPath
+            depsPath,
           );
 
           const action = await vscode.window.showInformationMessage(
             result.valid
               ? "Code successfully validated"
               : "Could not validate code.",
-            "Show details"
+            "Show details",
           );
 
           if (action === "Show details") {
@@ -195,23 +209,23 @@ export function activate(context: vscode.ExtensionContext) {
             const replace = await vscode.window.showInformationMessage(
               "Replace the selected range with these annotations?",
               "Replace selection",
-              "Skip"
+              "Skip",
             );
             if (replace === "Replace selection") {
               const originalRange = new vscode.Range(
                 editor.selection.start,
-                editor.selection.end
+                editor.selection.end,
               );
               await editor.edit((ed) => ed.replace(originalRange, framaText));
             }
           }
         } catch (err: any) {
           vscode.window.showErrorMessage(
-            "Error validating selection: " + (err?.message ?? String(err))
+            "Error validating selection: " + (err?.message ?? String(err)),
           );
         }
-      }
-    )
+      },
+    ),
   );
 
   context.subscriptions.push(
@@ -222,7 +236,7 @@ export function activate(context: vscode.ExtensionContext) {
           if (range.isEmpty) return;
           const action = new vscode.CodeAction(
             "Verify selection",
-            vscode.CodeActionKind.QuickFix
+            vscode.CodeActionKind.QuickFix,
           );
           action.command = {
             command: "doublecheckk.verifySelection",
@@ -231,8 +245,8 @@ export function activate(context: vscode.ExtensionContext) {
           return [action];
         }
       })(),
-      { providedCodeActionKinds: [vscode.CodeActionKind.QuickFix] }
-    )
+      { providedCodeActionKinds: [vscode.CodeActionKind.QuickFix] },
+    ),
   );
 }
 
@@ -241,7 +255,7 @@ function runPythonScript(
   code: string,
   provider: ProviderId,
   apiKey: string,
-  depsPath: string
+  depsPath: string,
 ): Promise<{ valid: boolean; frama?: string }> {
   if (!apiKey) throw new Error("API key not configured");
   const env = {
