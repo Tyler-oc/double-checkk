@@ -123,8 +123,9 @@ def verify_c_code(user_code: str, user_api_key: str, api_provider: str):
     )
     if not user_code:
         return {"valid": False, "error": "empty code"}
-    
-    prompt = """
+
+    prompt = (
+        """
 Example 1 ACSL Professional Coding Agent Output: [[[/*@ requires length > 0; requires \valid_read(arr + (0..length-1)); assigns \nothing; ensures \exists integer k; 0 <= k < length && \result == arr[k]; ensures \forall integer i; 0 <= i < length ==> \result >= arr[i]; */ int find_max(int arr[], int length) { int max = arr[0]; /*@ loop invariant 0 <= i <= length; loop invariant \forall integer j; 0 <= j < i ==> max >= arr[j]; loop invariant \exists integer k; 0 <= k < length && max == arr[k]; loop assigns i, max; loop variant length - i; */ for(int i = 1; i < length; i++) { if (arr[i] > max) { max = arr[i]; } } return max; } /*@ assigns \nothing; */ int main() { int arr[] = {1, 2, 4, 2, 8, 3}; int length = 6; int result = find_max(arr, length); return 0; } ]]]
 
 Example 2 ACSL Professional Coding Agent Output: [[[/*@ logic integer factorial(integer n) = (n <= 0) ? 1 : n * factorial(n - 1); */ /*@ requires n >= 0; requires n <= 12; assigns \nothing; ensures \result == factorial(n); */ int compute_factorial(int n) { int i, f; f = 1; /*@ loop invariant 1 <= i <= n + 1; loop invariant f == factorial(i - 1); loop invariant f >= 1; loop invariant 1 <= i <= 13; loop invariant i == 1 ==> f == 1; loop invariant i == 2 ==> f == 1; loop invariant i == 3 ==> f == 2; loop invariant i == 4 ==> f == 6; loop invariant i == 5 ==> f == 24; loop invariant i == 6 ==> f == 120; loop invariant i == 7 ==> f == 720; loop invariant i == 8 ==> f == 5040; loop invariant i == 9 ==> f == 40320; loop invariant i == 10 ==> f == 362880; loop invariant i == 11 ==> f == 3628800; loop invariant i == 12 ==> f == 39916800; loop invariant i == 13 ==> f == 479001600; loop assigns i, f; loop variant n - i + 1; */ for (i = 1; i <= n; i++) f = f * i; return f; } /*@ assigns \nothing; */ int main() { int n = 5, i, f; f = 1; /*@ loop invariant 1 <= i <= n + 1; loop invariant f == factorial(i - 1); loop invariant f >= 1; loop invariant i == 1 ==> f == 1; loop invariant i == 2 ==> f == 1; loop invariant i == 3 ==> f == 2; loop invariant i == 4 ==> f == 6; loop invariant i == 5 ==> f == 24; loop invariant i == 6 ==> f == 120; loop assigns i, f; loop variant n - i + 1; */ for (i = 1; i <= n; i++) f = f * i; return f; } ]]]
@@ -146,8 +147,11 @@ You are an expert in Frama-C/ACSL. Please verify my code (attached below)
     and wrap the code in any function / include statements necessary to create a valid c program.
 It is vital that the generated code compiles to a valid C program.
      Now, here is the code to be verified: [[[
-""" + user_code + """]]]
 """
+        + user_code
+        + """]]]
+"""
+    )
 
     chat_log = [prompt]
     max_trials = 6
@@ -169,7 +173,7 @@ It is vital that the generated code compiles to a valid C program.
 
         if "!!i give up!!" in extracted_code.lower():
             dprint("trial: LLM marked code as unverifiable")
-            return {"valid": False}
+            return {"valid": False, "frama": "trial: LLM marked code as unverifiable"}
 
         # Write to a temp file and run Frama-C
         with tempfile.NamedTemporaryFile(mode="w", suffix=".c", delete=False) as tmp:
@@ -186,7 +190,7 @@ It is vital that the generated code compiles to a valid C program.
 
         if ok:
             dprint("verification succeeded")
-            return {"valid": True}
+            return {"valid": True, "frama": extracted_code}
         else:
             dprint("verification failed; continuing to next trial")
             chat_log.append(
@@ -196,7 +200,10 @@ It is vital that the generated code compiles to a valid C program.
             )
 
     dprint("max trials exceeded")
-    return {"valid": False}
+    return {
+        "valid": False,
+        "frama": extracted_code + "\n The issue was: " + frama_output,
+    }
 
 
 def main():
