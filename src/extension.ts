@@ -3,6 +3,8 @@ import * as cp from "child_process";
 import * as path from "path";
 import * as fs from "fs";
 import { promisify } from "util";
+import { exit } from "process";
+import os from "os";
 
 const outputChannel = vscode.window.createOutputChannel("Python-debug");
 
@@ -17,17 +19,75 @@ const secretKey = (p: ProviderId) => `doublecheckk.apiKey.${p}`;
 
 const execPromise = promisify(cp.exec);
 
-async function installFrama() {
+function commandExists(cmd: string): boolean {
   try {
-    console.log("Checking if frama c installed");
-    cp.execSync("frama-c --version", { stdio: "ignore" });
-    console.log("frama-c found");
-  } catch (e) {
-    vscode.window.showInformationMessage(
-      "Frama-c not installed, please install before continuing",
-      { modal: true },
-      "Okay",
+    cp.execSync(
+      process.platform === "win32" ? `where ${cmd}` : `command -v ${cmd}`,
+      {
+        stdio: "ignore",
+      },
     );
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+async function installFrama(): Promise<boolean> {
+  if (commandExists("frama-c")) {
+    console.log("Frama-C already installed ✅");
+    return true;
+  } else {
+    const result = await vscode.window.showQuickPick(["Yes", "No"], {
+      placeHolder: "Frama-c not found on device, would you like to install it?",
+    });
+
+    if (result && result == "No") {
+      vscode.window.showInformationMessage("Exiting double checkk");
+      exit(0);
+    } else if (!result) {
+      vscode.window.showInformationMessage("No result found");
+      exit(0);
+    }
+  }
+
+  const platform = os.platform();
+
+  try {
+    if (platform === "darwin") {
+      // macOS (Homebrew)
+      if (!commandExists("brew")) {
+        throw new Error("Homebrew is required on macOS");
+      }
+      cp.execSync("brew update", { stdio: "inherit" });
+      cp.execSync("brew install frama-c", { stdio: "inherit" });
+    } else if (platform === "linux") {
+      // Linux (best effort)
+      if (commandExists("apt")) {
+        cp.execSync("sudo apt update", { stdio: "inherit" });
+        cp.execSync("sudo apt install -y frama-c", { stdio: "inherit" });
+      } else if (commandExists("dnf")) {
+        cp.execSync("sudo dnf install -y frama-c", { stdio: "inherit" });
+      } else if (commandExists("pacman")) {
+        cp.execSync("sudo pacman -S --noconfirm frama-c", { stdio: "inherit" });
+      } else {
+        throw new Error("Unsupported Linux package manager");
+      }
+    } else if (platform === "win32") {
+      //not available on windows
+      throw new Error(
+        "Frama-C is not officially supported on Windows.\n" +
+          "Use WSL (Ubuntu) and install via apt instead.",
+      );
+    } else {
+      throw new Error(`Unsupported platform: ${platform}`);
+    }
+
+    console.log("Frama-C installed successfully");
+    return true;
+  } catch (err) {
+    console.error(`Failed to install Frama-C ${err}`);
+    return false;
   }
 }
 
@@ -136,7 +196,7 @@ async function getProviderAndKey(
 
 let depsPathPromise: Promise<string>;
 
-export function activate(context: vscode.ExtensionContext) {
+export async function activate(context: vscode.ExtensionContext) {
   vscode.window.showInformationMessage("Double-Checkk extension activated");
 
   vscode.window.showInformationMessage(
@@ -146,6 +206,12 @@ export function activate(context: vscode.ExtensionContext) {
   depsPathPromise.catch((err) => {
     console.error("Failed to install dependencies: ", err);
   });
+
+  const framaInstalled = await installFrama();
+
+  if (!framaInstalled) {
+    exit(0);
+  }
 
   context.subscriptions.push(
     vscode.commands.registerCommand("doublecheckk.configureApi", async () => {
