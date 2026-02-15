@@ -51,3 +51,5 @@ Thumbs.db
 double-check-venv/
 
 python-libs/
+
+python_scripts/double-check-venv/

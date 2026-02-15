@@ -1,11 +1,24 @@
 .vscode/**
 .vscode-test/**
+node_modules/**
 src/**
 .gitignore
-.yarnrc
-vsc-extension-quickstart.md
-**/tsconfig.json
-**/eslint.config.mjs
-**/*.map
+.vscodeignore
+tsconfig.json
 **/*.ts
-**/.vscode-test.*
+vsc-extension-quickstart.md
+
+# THE FIX: Explicitly ignore the venv and local junk
+python_scripts/double-check-venv/
+python_scripts/double-check-venv/**
+python-deps/**
+__pycache__/**
+.installed
+
+# Ignore test code in the final package
+out/test/**
+extension_test/**
+
+# Keep only the compiled JS
+out/**
+!out/**/*.js
