@@ -42,7 +42,6 @@ const cp = __importStar(require("child_process"));
 const path = __importStar(require("path"));
 const fs = __importStar(require("fs"));
 const util_1 = require("util");
-const process_1 = require("process");
 const os_1 = __importDefault(require("os"));
 const outputChannel = vscode.window.createOutputChannel("Python-debug");
 const PROVIDERS = [
@@ -65,37 +64,29 @@ function commandExists(cmd) {
 }
 async function installFrama() {
     if (commandExists("frama-c")) {
-        console.log("Frama-C already installed ✅");
+        console.log("Frama-C already installed");
         return true;
     }
-    else {
-        const result = await vscode.window.showQuickPick(["Yes", "No"], {
-            placeHolder: "Frama-c not found on device, would you like to install it?",
-        });
-        if (result && result == "No") {
-            vscode.window.showInformationMessage("Exiting double checkk");
-            (0, process_1.exit)(0);
-        }
-        else if (!result) {
-            vscode.window.showInformationMessage("No result found");
-            (0, process_1.exit)(0);
-        }
+    const result = await vscode.window.showQuickPick(["Yes", "No"], {
+        placeHolder: "Frama-C not found. Would you like to install it?",
+    });
+    // If user picks "No" or clicks away (undefined)
+    if (result !== "Yes") {
+        vscode.window.showInformationMessage("Installation cancelled. Frama-C is required for this feature.");
+        return false; // This tells the caller to stop
     }
     const platform = os_1.default.platform();
     try {
         if (platform === "darwin") {
-            // macOS (Homebrew)
-            if (!commandExists("brew")) {
+            if (!commandExists("brew"))
                 throw new Error("Homebrew is required on macOS");
-            }
-            cp.execSync("brew update", { stdio: "inherit" });
-            cp.execSync("brew install frama-c", { stdio: "inherit" });
+            cp.execSync("brew update && brew install frama-c", { stdio: "inherit" });
         }
         else if (platform === "linux") {
-            // Linux (best effort)
             if (commandExists("apt")) {
-                cp.execSync("sudo apt update", { stdio: "inherit" });
-                cp.execSync("sudo apt install -y frama-c", { stdio: "inherit" });
+                cp.execSync("sudo apt update && sudo apt install -y frama-c", {
+                    stdio: "inherit",
+                });
             }
             else if (commandExists("dnf")) {
                 cp.execSync("sudo dnf install -y frama-c", { stdio: "inherit" });
@@ -104,22 +95,20 @@ async function installFrama() {
                 cp.execSync("sudo pacman -S --noconfirm frama-c", { stdio: "inherit" });
             }
             else {
-                throw new Error("Unsupported Linux package manager");
+                throw new Error("Unsupported Linux package manager. Please install frama-c manually.");
             }
         }
         else if (platform === "win32") {
-            //not available on windows
-            throw new Error("Frama-C is not officially supported on Windows.\n" +
-                "Use WSL (Ubuntu) and install via apt instead.");
+            throw new Error("Frama-C is not officially supported on Windows. Use WSL (Ubuntu).");
         }
         else {
             throw new Error(`Unsupported platform: ${platform}`);
         }
-        console.log("Frama-C installed successfully");
+        vscode.window.showInformationMessage("Frama-C installed successfully!");
         return true;
     }
     catch (err) {
-        console.error(`Failed to install Frama-C ${err}`);
+        vscode.window.showErrorMessage(`Failed to install Frama-C: ${err instanceof Error ? err.message : err}`);
         return false;
     }
 }
@@ -204,7 +193,7 @@ async function activate(context) {
     });
     const framaInstalled = await installFrama();
     if (!framaInstalled) {
-        (0, process_1.exit)(0);
+        return;
     }
     context.subscriptions.push(vscode.commands.registerCommand("doublecheckk.configureApi", async () => {
         const depsPath = await ensureDependencies(context);
@@ -268,44 +257,54 @@ async function activate(context) {
 function runPythonScript(scriptPath, code, provider, apiKey, depsPath) {
     if (!apiKey)
         throw new Error("API key not configured");
-    const env = {
-        ...process.env,
-        PYTHONPATH: depsPath,
-    };
+    const env = { ...process.env, PYTHONPATH: depsPath };
     return new Promise((resolve, reject) => {
         const proc = cp.spawn("python", [scriptPath, apiKey, provider], {
             stdio: ["pipe", "pipe", "pipe"],
             env: env,
         });
+        // Write input to stdin
         proc.stdin.write(code);
         proc.stdin.end();
-        let output = "";
+        let stdoutData = "";
+        let stderrData = "";
         proc.stdout.on("data", (data) => {
-            outputChannel.append(data.toString());
-            output += data.toString();
-            console.log("Received data:", data.toString());
+            const str = data.toString();
+            stdoutData += str;
+            outputChannel.append(str);
         });
         proc.stderr?.on("data", (data) => {
-            outputChannel.append(data.toString());
-            output += data.toString();
-            console.error("Received error data:", data.toString());
+            const str = data.toString();
+            stderrData += str;
+            outputChannel.append(`[STDERR]: ${str}`);
         });
-        proc.on("close", () => {
+        proc.on("error", (err) => {
+            reject(new Error(`Failed to start Python process: ${err.message}`));
+        });
+        proc.on("close", (exitCode) => {
+            if (exitCode !== 0) {
+                console.error("Python script exited with code:", exitCode, stderrData);
+                // Fallback: even if it failed, check if "success" was printed
+                return resolve({ valid: /success/i.test(stdoutData) });
+            }
             try {
-                outputChannel.show(true);
-                const parsed = JSON.parse(output);
-                console.log("Parsed output:", parsed);
+                // Use regex to find the JSON block in case of leading/trailing junk text
+                const jsonMatch = stdoutData.match(/\{[\s\S]*\}/);
+                if (!jsonMatch) {
+                    throw new Error("No JSON found in output");
+                }
+                const parsed = JSON.parse(jsonMatch[0]);
                 resolve({
-                    valid: !!parsed.valid,
+                    valid: Boolean(parsed.valid),
                     frama: typeof parsed.frama === "string" ? parsed.frama : undefined,
                 });
-                return;
             }
-            catch {
-                resolve({ valid: /success/i.test(output) });
+            catch (parseError) {
+                console.warn("JSON parse failed, checking for keyword fallback...");
+                // Final fallback to keyword detection if JSON is mangled
+                resolve({ valid: /success/i.test(stdoutData) });
             }
         });
-        proc.on("error", reject);
     });
 }
 //# sourceMappingURL=extension.js.map

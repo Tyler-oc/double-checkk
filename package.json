@@ -3,6 +3,10 @@
   "displayName": "Double-Checkk",
   "description": "Verifying AI generated C code using coq proofing",
   "version": "0.0.1",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Tyler-oc/double-checkk.git"
+  },
   "engines": {
     "vscode": "^1.104.0"
   },
