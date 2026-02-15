@@ -32,6 +32,9 @@ var __importStar = (this && this.__importStar) || (function () {
         return result;
     };
 })();
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.activate = activate;
 const vscode = __importStar(require("vscode"));
@@ -39,6 +42,8 @@ const cp = __importStar(require("child_process"));
 const path = __importStar(require("path"));
 const fs = __importStar(require("fs"));
 const util_1 = require("util");
+const process_1 = require("process");
+const os_1 = __importDefault(require("os"));
 const outputChannel = vscode.window.createOutputChannel("Python-debug");
 const PROVIDERS = [
     { id: "openai", label: "OpenAI (ChatGPT)" },
@@ -47,14 +52,75 @@ const PROVIDERS = [
 ];
 const secretKey = (p) => `doublecheckk.apiKey.${p}`;
 const execPromise = (0, util_1.promisify)(cp.exec);
-async function installFrama() {
+function commandExists(cmd) {
     try {
-        console.log("Checking if frama c installed");
-        cp.execSync("frama-c --version", { stdio: "ignore" });
-        console.log("frama-c found");
+        cp.execSync(process.platform === "win32" ? `where ${cmd}` : `command -v ${cmd}`, {
+            stdio: "ignore",
+        });
+        return true;
     }
-    catch (e) {
-        vscode.window.showInformationMessage("Frama-c not installed, please install before continuing", { modal: true }, "Okay");
+    catch {
+        return false;
+    }
+}
+async function installFrama() {
+    if (commandExists("frama-c")) {
+        console.log("Frama-C already installed ✅");
+        return true;
+    }
+    else {
+        const result = await vscode.window.showQuickPick(["Yes", "No"], {
+            placeHolder: "Frama-c not found on device, would you like to install it?",
+        });
+        if (result && result == "No") {
+            vscode.window.showInformationMessage("Exiting double checkk");
+            (0, process_1.exit)(0);
+        }
+        else if (!result) {
+            vscode.window.showInformationMessage("No result found");
+            (0, process_1.exit)(0);
+        }
+    }
+    const platform = os_1.default.platform();
+    try {
+        if (platform === "darwin") {
+            // macOS (Homebrew)
+            if (!commandExists("brew")) {
+                throw new Error("Homebrew is required on macOS");
+            }
+            cp.execSync("brew update", { stdio: "inherit" });
+            cp.execSync("brew install frama-c", { stdio: "inherit" });
+        }
+        else if (platform === "linux") {
+            // Linux (best effort)
+            if (commandExists("apt")) {
+                cp.execSync("sudo apt update", { stdio: "inherit" });
+                cp.execSync("sudo apt install -y frama-c", { stdio: "inherit" });
+            }
+            else if (commandExists("dnf")) {
+                cp.execSync("sudo dnf install -y frama-c", { stdio: "inherit" });
+            }
+            else if (commandExists("pacman")) {
+                cp.execSync("sudo pacman -S --noconfirm frama-c", { stdio: "inherit" });
+            }
+            else {
+                throw new Error("Unsupported Linux package manager");
+            }
+        }
+        else if (platform === "win32") {
+            //not available on windows
+            throw new Error("Frama-C is not officially supported on Windows.\n" +
+                "Use WSL (Ubuntu) and install via apt instead.");
+        }
+        else {
+            throw new Error(`Unsupported platform: ${platform}`);
+        }
+        console.log("Frama-C installed successfully");
+        return true;
+    }
+    catch (err) {
+        console.error(`Failed to install Frama-C ${err}`);
+        return false;
     }
 }
 //download any dependencies the user doesn't have
@@ -129,13 +195,17 @@ async function getProviderAndKey(context, autoConfigure = true) {
     return { provider, apiKey };
 }
 let depsPathPromise;
-function activate(context) {
+async function activate(context) {
     vscode.window.showInformationMessage("Double-Checkk extension activated");
     vscode.window.showInformationMessage("Verifying necessary package requirements");
     depsPathPromise = ensureDependencies(context);
     depsPathPromise.catch((err) => {
         console.error("Failed to install dependencies: ", err);
     });
+    const framaInstalled = await installFrama();
+    if (!framaInstalled) {
+        (0, process_1.exit)(0);
+    }
     context.subscriptions.push(vscode.commands.registerCommand("doublecheckk.configureApi", async () => {
         const depsPath = await ensureDependencies(context);
         configureApi(context);
