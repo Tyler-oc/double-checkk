@@ -3,7 +3,6 @@ import * as cp from "child_process";
 import * as path from "path";
 import * as fs from "fs";
 import { promisify } from "util";
-import { exit } from "process";
 import os from "os";
 
 const outputChannel = vscode.window.createOutputChannel("Python-debug");
@@ -16,16 +15,25 @@ const PROVIDERS: { id: ProviderId; label: string }[] = [
 ];
 
 const secretKey = (p: ProviderId) => `doublecheckk.apiKey.${p}`;
-
 const execPromise = promisify(cp.exec);
+
+async function getPythonCommand(): Promise<string> {
+  for (const cmd of ["python3", "python"]) {
+    try {
+      cp.execSync(`${cmd} --version`, { stdio: "ignore" });
+      return cmd;
+    } catch {
+      continue;
+    }
+  }
+  throw new Error("Python not found. Please install Python 3.");
+}
 
 function commandExists(cmd: string): boolean {
   try {
     cp.execSync(
-      process.platform === "win32" ? `where ${cmd}` : `command -v ${cmd}`,
-      {
-        stdio: "ignore",
-      },
+      os.platform() === "win32" ? `where ${cmd}` : `command -v ${cmd}`,
+      { stdio: "ignore" },
     );
     return true;
   } catch {
@@ -35,7 +43,6 @@ function commandExists(cmd: string): boolean {
 
 async function installFrama(): Promise<boolean> {
   if (commandExists("frama-c")) {
-    console.log("Frama-C already installed");
     return true;
   }
 
@@ -43,54 +50,47 @@ async function installFrama(): Promise<boolean> {
     placeHolder: "Frama-C not found. Would you like to install it?",
   });
 
-  // If user picks "No" or clicks away (undefined)
   if (result !== "Yes") {
     vscode.window.showInformationMessage(
-      "Installation cancelled. Frama-C is required for this feature.",
-    );
-    return false; // This tells the caller to stop
-  }
-
-  const platform = os.platform();
-
-  try {
-    if (platform === "darwin") {
-      if (!commandExists("brew"))
-        throw new Error("Homebrew is required on macOS");
-      cp.execSync("brew update && brew install frama-c", { stdio: "inherit" });
-    } else if (platform === "linux") {
-      if (commandExists("apt")) {
-        cp.execSync("sudo apt update && sudo apt install -y frama-c", {
-          stdio: "inherit",
-        });
-      } else if (commandExists("dnf")) {
-        cp.execSync("sudo dnf install -y frama-c", { stdio: "inherit" });
-      } else if (commandExists("pacman")) {
-        cp.execSync("sudo pacman -S --noconfirm frama-c", { stdio: "inherit" });
-      } else {
-        throw new Error(
-          "Unsupported Linux package manager. Please install frama-c manually.",
-        );
-      }
-    } else if (platform === "win32") {
-      throw new Error(
-        "Frama-C is not officially supported on Windows. Use WSL (Ubuntu).",
-      );
-    } else {
-      throw new Error(`Unsupported platform: ${platform}`);
-    }
-
-    vscode.window.showInformationMessage("Frama-C installed successfully!");
-    return true;
-  } catch (err) {
-    vscode.window.showErrorMessage(
-      `Failed to install Frama-C: ${err instanceof Error ? err.message : err}`,
+      "Installation cancelled. Frama-C is required.",
     );
     return false;
   }
+
+  const platform = os.platform();
+  const terminal = vscode.window.createTerminal("Frama-C Installer");
+  terminal.show();
+
+  if (platform === "darwin") {
+    if (!commandExists("brew")) {
+      vscode.window.showErrorMessage("Homebrew is required on macOS.");
+      return false;
+    }
+    terminal.sendText("brew update && brew install frama-c");
+  } else if (platform === "linux") {
+    if (commandExists("apt")) {
+      terminal.sendText("sudo apt update && sudo apt install -y frama-c");
+    } else if (commandExists("dnf")) {
+      terminal.sendText("sudo dnf install -y frama-c");
+    } else if (commandExists("pacman")) {
+      terminal.sendText("sudo pacman -S --noconfirm frama-c");
+    } else {
+      vscode.window.showErrorMessage(
+        "Unsupported Linux package manager. Install frama-c manually.",
+      );
+      return false;
+    }
+  } else {
+    vscode.window.showErrorMessage("Frama-C requires Linux/WSL or macOS.");
+    return false;
+  }
+
+  vscode.window.showInformationMessage(
+    "Check the terminal to complete Frama-C installation.",
+  );
+  return true;
 }
 
-//download any dependencies the user doesn't have
 async function ensureDependencies(
   context: vscode.ExtensionContext,
 ): Promise<string> {
@@ -104,52 +104,34 @@ async function ensureDependencies(
   return await vscode.window.withProgress<string>(
     {
       location: vscode.ProgressLocation.Notification,
-      title: "Installing Python dependencies, please wait ...",
+      title: "Installing Python dependencies...",
     },
     async () => {
-      try {
-        // Create the directory if it doesn't exist
-        if (!fs.existsSync(depsPath)) {
-          fs.mkdirSync(depsPath, { recursive: true });
-        }
-
-        const requirementsPath = path.join(
-          context.extensionPath,
-          "requirements.txt",
-        );
-
-        // Install dependencies
-        const { stdout, stderr } = await execPromise(
-          `pip install -r "${requirementsPath}" --target "${depsPath}"`,
-        );
-
-        console.log("Pip stdout:", stdout);
-        if (stderr) {
-          console.log("Pip stderr:", stderr);
-        }
-
-        // Create flag file to mark successful installation
-        fs.writeFileSync(flagFile, new Date().toISOString());
-
-        return depsPath;
-      } catch (error) {
-        const errorMessage =
-          error instanceof Error ? error.message : String(error);
-        vscode.window.showErrorMessage(
-          `Failed to install Python dependencies: ${errorMessage}`,
-        );
-        throw error;
+      if (!fs.existsSync(depsPath)) {
+        fs.mkdirSync(depsPath, { recursive: true });
       }
+      const reqPath = path.join(context.extensionPath, "requirements.txt");
+
+      const pythonCmd = await getPythonCommand();
+      await execPromise(
+        `${pythonCmd} -m pip install -r "${reqPath}" --target "${depsPath}"`,
+      );
+
+      fs.writeFileSync(flagFile, new Date().toISOString());
+      return depsPath;
     },
   );
 }
 
+// --- KEEPING EXISTING API LOGIC ---
 async function configureApi(context: vscode.ExtensionContext) {
   const pick = await vscode.window.showQuickPick(
     PROVIDERS.map((p) => ({ label: p.label, description: p.id, id: p.id })),
     { placeHolder: "Select your LLM provider", ignoreFocusOut: true },
   );
-  if (!pick) return;
+  if (!pick) {
+    return;
+  }
 
   const existing = await context.secrets.get(secretKey(pick.id));
   const apiKey = await vscode.window.showInputBox({
@@ -159,7 +141,9 @@ async function configureApi(context: vscode.ExtensionContext) {
     ignoreFocusOut: true,
     validateInput: (v) => (v.trim() ? null : "API key is required"),
   });
-  if (!apiKey) return;
+  if (!apiKey) {
+    return;
+  }
 
   await context.secrets.store(secretKey(pick.id), apiKey);
   await vscode.workspace
@@ -177,18 +161,15 @@ async function getProviderAndKey(
   const provider = (cfg.get("provider") as ProviderId | undefined) ?? "openai";
   const apiKey =
     (await context.secrets.get(secretKey(provider))) ??
-    (cfg.get("apiKey") as string | undefined); // legacy fallback
+    (cfg.get("apiKey") as string | undefined);
 
   if (!apiKey) {
     if (autoConfigure) {
       await configureApi(context);
-      return getProviderAndKey(context, /*autoConfigure*/ false);
-    } else {
-      vscode.window.showWarningMessage(
-        "Double-Checkk: API key not configured.",
-      );
-      return null;
+      return getProviderAndKey(context, false);
     }
+    vscode.window.showWarningMessage("Double-Checkk: API key not configured.");
+    return null;
   }
   return { provider, apiKey };
 }
@@ -196,25 +177,17 @@ async function getProviderAndKey(
 let depsPathPromise: Promise<string>;
 
 export async function activate(context: vscode.ExtensionContext) {
-  vscode.window.showInformationMessage("Double-Checkk extension activated");
+  outputChannel.appendLine("Double-Checkk extension activating...");
 
-  vscode.window.showInformationMessage(
-    "Verifying necessary package requirements",
-  );
+  // Start background tasks
   depsPathPromise = ensureDependencies(context);
-  depsPathPromise.catch((err) => {
-    console.error("Failed to install dependencies: ", err);
-  });
 
-  const framaInstalled = await installFrama();
-
-  if (!framaInstalled) {
-    return;
-  }
+  // We check for Frama-C but don't let it block the whole activation
+  installFrama();
 
   context.subscriptions.push(
     vscode.commands.registerCommand("doublecheckk.configureApi", async () => {
-      const depsPath = await ensureDependencies(context);
+      await depsPathPromise;
       configureApi(context);
     }),
   );
@@ -224,27 +197,29 @@ export async function activate(context: vscode.ExtensionContext) {
       "doublecheckk.verifySelection",
       async () => {
         const editor = vscode.window.activeTextEditor;
-        if (!editor) {
-          vscode.window.showErrorMessage("No active editor");
+        if (!editor || !editor.selection) {
+          vscode.window.showErrorMessage("No active editor or selection");
           return;
         }
+
         const selection = editor.document.getText(editor.selection);
         if (!selection) {
-          vscode.window.showErrorMessage("No code selected");
           return;
         }
 
-        const creds = await getProviderAndKey(context, /*autoConfigure*/ true);
-        if (!creds) return;
+        const creds = await getProviderAndKey(context, true);
+        if (!creds) {
+          return;
+        }
 
-        vscode.window.showInformationMessage("Verifying selection…");
+        vscode.window.showInformationMessage("Verifying selection...");
 
         try {
           const pyPath = context.asAbsolutePath(
             path.join("python_scripts", "frama_c.py"),
           );
-
           const depsPath = await depsPathPromise;
+
           const result = await runPythonScript(
             pyPath,
             selection,
@@ -262,9 +237,7 @@ export async function activate(context: vscode.ExtensionContext) {
 
           if (action === "Show details") {
             const framaText =
-              result.frama && result.frama.trim().length > 0
-                ? result.frama
-                : "// No Frama-C details were returned by the verifier.";
+              result.frama?.trim() || "// No Frama-C details returned.";
             const doc = await vscode.workspace.openTextDocument({
               content: framaText,
               language: "c",
@@ -272,33 +245,34 @@ export async function activate(context: vscode.ExtensionContext) {
             await vscode.window.showTextDocument(doc, { preview: true });
 
             const replace = await vscode.window.showInformationMessage(
-              "Replace the selected range with these annotations?",
+              "Apply annotations?",
               "Replace selection",
               "Skip",
             );
             if (replace === "Replace selection") {
-              const originalRange = new vscode.Range(
-                editor.selection.start,
-                editor.selection.end,
+              await editor.edit((ed) =>
+                ed.replace(editor.selection, framaText),
               );
-              await editor.edit((ed) => ed.replace(originalRange, framaText));
             }
           }
         } catch (err: any) {
           vscode.window.showErrorMessage(
-            "Error validating selection: " + (err?.message ?? String(err)),
+            `Error: ${err?.message ?? String(err)}`,
           );
         }
       },
     ),
   );
 
+  // Code Action Provider registration remains the same...
   context.subscriptions.push(
     vscode.languages.registerCodeActionsProvider(
       { scheme: "file" },
-      new (class implements vscode.CodeActionProvider {
-        provideCodeActions(doc: vscode.TextDocument, range: vscode.Range) {
-          if (range.isEmpty) return;
+      {
+        provideCodeActions(doc, range) {
+          if (range.isEmpty) {
+            return;
+          }
           const action = new vscode.CodeAction(
             "Verify selection",
             vscode.CodeActionKind.QuickFix,
@@ -308,76 +282,54 @@ export async function activate(context: vscode.ExtensionContext) {
             title: "Verify selection",
           };
           return [action];
-        }
-      })(),
+        },
+      },
       { providedCodeActionKinds: [vscode.CodeActionKind.QuickFix] },
     ),
   );
 }
 
-function runPythonScript(
+async function runPythonScript(
   scriptPath: string,
   code: string,
   provider: ProviderId,
   apiKey: string,
   depsPath: string,
 ): Promise<{ valid: boolean; frama?: string }> {
-  if (!apiKey) throw new Error("API key not configured");
+  const pythonCmd = await getPythonCommand();
+  const pathSep = os.platform() === "win32" ? ";" : ":";
 
-  const env = { ...process.env, PYTHONPATH: depsPath };
+  // Merge PYTHONPATH properly
+  const env = {
+    ...process.env,
+    PYTHONPATH: process.env.PYTHONPATH
+      ? `${depsPath}${pathSep}${process.env.PYTHONPATH}`
+      : depsPath,
+  };
 
   return new Promise((resolve, reject) => {
-    const proc = cp.spawn("python", [scriptPath, apiKey, provider], {
-      stdio: ["pipe", "pipe", "pipe"],
-      env: env,
-    });
+    const proc = cp.spawn(pythonCmd, [scriptPath, apiKey, provider], { env });
 
-    // Write input to stdin
     proc.stdin.write(code);
     proc.stdin.end();
 
     let stdoutData = "";
-    let stderrData = "";
+    proc.stdout.on("data", (d) => (stdoutData += d.toString()));
+    proc.stderr.on("data", (d) => outputChannel.append(`[Python Error]: ${d}`));
 
-    proc.stdout.on("data", (data) => {
-      const str = data.toString();
-      stdoutData += str;
-      outputChannel.append(str);
-    });
+    proc.on("error", (err) =>
+      reject(new Error(`Process error: ${err.message}`)),
+    );
 
-    proc.stderr?.on("data", (data) => {
-      const str = data.toString();
-      stderrData += str;
-      outputChannel.append(`[STDERR]: ${str}`);
-    });
-
-    proc.on("error", (err) => {
-      reject(new Error(`Failed to start Python process: ${err.message}`));
-    });
-
-    proc.on("close", (exitCode) => {
-      if (exitCode !== 0) {
-        console.error("Python script exited with code:", exitCode, stderrData);
-        // Fallback: even if it failed, check if "success" was printed
-        return resolve({ valid: /success/i.test(stdoutData) });
-      }
-
+    proc.on("close", (code) => {
       try {
-        // Use regex to find the JSON block in case of leading/trailing junk text
         const jsonMatch = stdoutData.match(/\{[\s\S]*\}/);
         if (!jsonMatch) {
-          throw new Error("No JSON found in output");
+          throw new Error("Invalid response from script");
         }
-
         const parsed = JSON.parse(jsonMatch[0]);
-
-        resolve({
-          valid: Boolean(parsed.valid),
-          frama: typeof parsed.frama === "string" ? parsed.frama : undefined,
-        });
-      } catch (parseError) {
-        console.warn("JSON parse failed, checking for keyword fallback...");
-        // Final fallback to keyword detection if JSON is mangled
+        resolve({ valid: !!parsed.valid, frama: parsed.frama });
+      } catch {
         resolve({ valid: /success/i.test(stdoutData) });
       }
     });
