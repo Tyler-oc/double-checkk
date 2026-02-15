@@ -1,6 +1,7 @@
 {
   "name": "doublecheckk",
   "displayName": "Double-Checkk",
+  "publisher": "noahschwartz",
   "description": "Verifying AI generated C code using coq proofing",
   "version": "0.0.1",
   "repository": {
