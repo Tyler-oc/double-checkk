@@ -14,8 +14,7 @@
   "categories": [
     "Other"
   ],
-  "activationEvents": [
-  ],
+  "activationEvents": [],
   "main": "./out/extension.js",
   "contributes": {
     "commands": [
@@ -25,7 +24,11 @@
       },
       {
         "command": "doublecheckk.configureApi",
-        "title": "Double-Checkk: Configure API…"
+        "title": "Double-Checkk: Set or reset API key"
+      },
+      {
+        "command": "doublecheckk.switchProvider",
+        "title": "Double-Checkk: Switch LLM provider / toggle .env file"
       }
     ],
     "menus": {
@@ -68,6 +71,11 @@
           "default": "",
           "description": "(Legacy) API key. New installs store keys securely in the VS Code Secret Storage.",
           "markdownDescription": "Deprecated: Keys are now stored securely via Secret Storage. Only used as fallback."
+        },
+        "doublecheckk.useEnvFile": {
+          "type": "boolean",
+          "default": true,
+          "description": "When enabled, the extension will prioritize API keys found in a local .env file over global settings."
         }
       }
     }

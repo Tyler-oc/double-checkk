@@ -4,6 +4,7 @@ import * as path from "path";
 import * as fs from "fs";
 import { promisify } from "util";
 import os from "os";
+import { ConfigurationTarget } from "vscode";
 
 const outputChannel = vscode.window.createOutputChannel("Python-debug");
 
@@ -123,7 +124,6 @@ async function ensureDependencies(
   );
 }
 
-// --- KEEPING EXISTING API LOGIC ---
 async function configureApi(context: vscode.ExtensionContext) {
   const pick = await vscode.window.showQuickPick(
     PROVIDERS.map((p) => ({ label: p.label, description: p.id, id: p.id })),
@@ -133,19 +133,17 @@ async function configureApi(context: vscode.ExtensionContext) {
     return;
   }
 
-  const existing = await context.secrets.get(secretKey(pick.id));
   const apiKey = await vscode.window.showInputBox({
     prompt: `Enter API key for ${pick.label}`,
-    value: existing ?? "",
     password: true,
     ignoreFocusOut: true,
-    validateInput: (v) => (v.trim() ? null : "API key is required"),
+    validateInput: (v) => (v.trim() ? null : "API key cannot be empty"),
   });
   if (!apiKey) {
     return;
   }
 
-  await context.secrets.store(secretKey(pick.id), apiKey);
+  await context.secrets.store(secretKey(pick.id as ProviderId), apiKey);
   await vscode.workspace
     .getConfiguration("doublecheckk")
     .update("provider", pick.id, vscode.ConfigurationTarget.Global);
@@ -158,47 +156,49 @@ async function getProviderAndKey(
   autoConfigure = true,
 ): Promise<{ provider: ProviderId; apiKey: string } | null> {
   const cfg = vscode.workspace.getConfiguration("doublecheckk");
-  let provider = (cfg.get("provider") as ProviderId | undefined) ?? "openai";
+  let provider = cfg.get<ProviderId>("provider" , "openai");
+  const useEnv = cfg.get<boolean>("useEnvFile", true);
 
-  // Check for .env file in workspace root
-  const workspaceFolders = vscode.workspace.workspaceFolders;
-  if (workspaceFolders) {
-    for (const folder of workspaceFolders) {
-      const envPath = path.join(folder.uri.fsPath, ".env");
-      if (fs.existsSync(envPath)) {
-        try {
-          const envContent = fs.readFileSync(envPath, "utf-8");
-          const envLines = envContent.split("\n");
-          let envKey = "";
-          let foundProvider: ProviderId | null = null;
+  
+  if (useEnv) {
+    const workspaceFolders = vscode.workspace.workspaceFolders;
+    if (workspaceFolders) {
+      for (const folder of workspaceFolders) {
+        const envPath = path.join(folder.uri.fsPath, ".env");
+        if (fs.existsSync(envPath)) {
+          try {
+            const envContent = fs.readFileSync(envPath, "utf-8");
+            const envLines = envContent.split("\n");
+            let envKey = "";
+            let foundProvider: ProviderId | null = null;
 
-          for (const line of envLines) {
-            const trimmed = line.trim();
-            if (trimmed.startsWith("OPENAI_API_KEY=")) {
-              envKey = trimmed.split("=", 2)[1];
-              foundProvider = "openai";
-            } else if (trimmed.startsWith("ANTHROPIC_API_KEY=")) {
-              envKey = trimmed.split("=", 2)[1];
-              foundProvider = "anthropic";
-            } else if (trimmed.startsWith("GOOGLE_API_KEY=")) {
-              envKey = trimmed.split("=", 2)[1];
-              foundProvider = "google";
+            for (const line of envLines) {
+              const trimmed = line.trim();
+              if (trimmed.startsWith("OPENAI_API_KEY=")) {
+                envKey = trimmed.split("=", 2)[1];
+                foundProvider = "openai";
+              } else if (trimmed.startsWith("ANTHROPIC_API_KEY=")) {
+                envKey = trimmed.split("=", 2)[1];
+                foundProvider = "anthropic";
+              } else if (trimmed.startsWith("GOOGLE_API_KEY=")) {
+                envKey = trimmed.split("=", 2)[1];
+                foundProvider = "google";
+              }
             }
-          }
 
-          if (envKey && foundProvider) {
-            // Found a key in .env, use this provider and key
-            // Optional: warn user that .env is being used?
-            // For now, silently prefer .env as requested.
-             return { provider: foundProvider, apiKey: envKey.trim() };
+            if (envKey && foundProvider) {
+              outputChannel.appendLine(`Found API key for ${foundProvider} in .env file.`);
+              return { provider: foundProvider, apiKey: envKey.trim() };
+            }
+          } catch (e) {
+            console.error("Error reading .env file:", e);
           }
-        } catch (e) {
-          console.error("Error reading .env file:", e);
         }
       }
     }
   }
 
+  // Check API key in secrets fallback to config (not sure config should exist)
   const apiKey =
     (await context.secrets.get(secretKey(provider))) ??
     (cfg.get("apiKey") as string | undefined);
@@ -208,7 +208,13 @@ async function getProviderAndKey(
       await configureApi(context);
       return getProviderAndKey(context, false);
     }
-    vscode.window.showWarningMessage("Double-Checkk: API key not configured.");
+    const action = await vscode.window.showErrorMessage(
+      "Double-Checkk: API key not found.",
+      "Configure Key"
+    );
+    if (action === "Configure Key") {
+      vscode.commands.executeCommand("doublecheckk.configureApi");
+    }
     return null;
   }
   return { provider, apiKey };
@@ -219,16 +225,62 @@ let depsPathPromise: Promise<string>;
 export async function activate(context: vscode.ExtensionContext) {
   outputChannel.appendLine("Double-Checkk extension activating...");
 
-  // Start background tasks
   depsPathPromise = ensureDependencies(context);
 
-  // We check for Frama-C but don't let it block the whole activation
   installFrama();
+
+  const statusBarItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 100);
+  statusBarItem.command = "doublecheckk.switchProvider";
+  context.subscriptions.push(statusBarItem);
+
+  const updateStatusBar = () => {
+    const provider = vscode.workspace.getConfiguration("doublecheckk").get("provider", "openai");
+    statusBarItem.text = `$(sparkle) Double-Checkk: ${provider.toUpperCase()}`;
+    statusBarItem.show();
+  };
+
+  updateStatusBar();
+  vscode.workspace.onDidChangeConfiguration(e => {
+    if (e.affectsConfiguration("doublecheckk")) updateStatusBar();
+  });
 
   context.subscriptions.push(
     vscode.commands.registerCommand("doublecheckk.configureApi", async () => {
       await depsPathPromise;
       configureApi(context);
+    }),
+    vscode.commands.registerCommand("doublecheckk.switchProvider", async () => {
+      const cfg = vscode.workspace.getConfiguration("doublecheckk");
+      const currentProvider = cfg.get("provider");
+      const useEnv = cfg.get("useEnvFile");
+
+      const options = [
+        { label: "$(hubot) Change LLM Provider", description: `Currently using ${currentProvider}`, id: "change_provider" },
+        { label: "$(key) Reset/Update API Key", description: "Overwrite existing global key", id: "reset_key" },
+        { label: useEnv ? "$(file-code) Disable .env Priority" : "$(file-code) Enable .env Priority", id: "toggle_env" }
+      ];
+
+      const selection = await vscode.window.showQuickPick(options, {
+        placeHolder: "Double-Checkk Settings"
+      });
+
+      if (!selection) {
+        return;
+      }
+
+      if (selection.id === "change_provider") {
+        // Re-use your existing configureApi logic or a simpler version:
+        const pick = await vscode.window.showQuickPick(PROVIDERS);
+        if (pick) {
+          await cfg.update("provider", pick.id, vscode.ConfigurationTarget.Global);
+          vscode.window.showInformationMessage(`Switched to ${pick.label}`);
+        }
+      } else if (selection.id === "reset_key") {
+        await configureApi(context);
+      } else if (selection.id === "toggle_env") {
+        await cfg.update("useEnvFile", !useEnv, vscode.ConfigurationTarget.Global);
+        vscode.window.showInformationMessage(`.env priority is now ${!useEnv ? "Enabled" : "Disabled"}`);
+      }
     }),
   );
 
