@@ -192,6 +192,7 @@ async function getProviderAndKey(
             }
           } catch (e) {
             console.error("Error reading .env file:", e);
+            outputChannel.appendLine(`Error reading .env file: ${e}`);
           }
         }
       }
