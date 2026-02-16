@@ -158,7 +158,47 @@ async function getProviderAndKey(
   autoConfigure = true,
 ): Promise<{ provider: ProviderId; apiKey: string } | null> {
   const cfg = vscode.workspace.getConfiguration("doublecheckk");
-  const provider = (cfg.get("provider") as ProviderId | undefined) ?? "openai";
+  let provider = (cfg.get("provider") as ProviderId | undefined) ?? "openai";
+
+  // Check for .env file in workspace root
+  const workspaceFolders = vscode.workspace.workspaceFolders;
+  if (workspaceFolders) {
+    for (const folder of workspaceFolders) {
+      const envPath = path.join(folder.uri.fsPath, ".env");
+      if (fs.existsSync(envPath)) {
+        try {
+          const envContent = fs.readFileSync(envPath, "utf-8");
+          const envLines = envContent.split("\n");
+          let envKey = "";
+          let foundProvider: ProviderId | null = null;
+
+          for (const line of envLines) {
+            const trimmed = line.trim();
+            if (trimmed.startsWith("OPENAI_API_KEY=")) {
+              envKey = trimmed.split("=", 2)[1];
+              foundProvider = "openai";
+            } else if (trimmed.startsWith("ANTHROPIC_API_KEY=")) {
+              envKey = trimmed.split("=", 2)[1];
+              foundProvider = "anthropic";
+            } else if (trimmed.startsWith("GOOGLE_API_KEY=")) {
+              envKey = trimmed.split("=", 2)[1];
+              foundProvider = "google";
+            }
+          }
+
+          if (envKey && foundProvider) {
+            // Found a key in .env, use this provider and key
+            // Optional: warn user that .env is being used?
+            // For now, silently prefer .env as requested.
+             return { provider: foundProvider, apiKey: envKey.trim() };
+          }
+        } catch (e) {
+          console.error("Error reading .env file:", e);
+        }
+      }
+    }
+  }
+
   const apiKey =
     (await context.secrets.get(secretKey(provider))) ??
     (cfg.get("apiKey") as string | undefined);
@@ -207,6 +247,11 @@ export async function activate(context: vscode.ExtensionContext) {
           return;
         }
 
+        const userGoal = await vscode.window.showInputBox({
+          prompt: "What should this code do? (Leave blank for auto-inference)",
+          placeHolder: "e.g. Ensure the result is non-negative",
+        });
+
         const creds = await getProviderAndKey(context, true);
         if (!creds) {
           return;
@@ -226,6 +271,7 @@ export async function activate(context: vscode.ExtensionContext) {
             creds.provider,
             creds.apiKey,
             depsPath,
+            userGoal,
           );
 
           const action = await vscode.window.showInformationMessage(
@@ -295,6 +341,7 @@ async function runPythonScript(
   provider: ProviderId,
   apiKey: string,
   depsPath: string,
+  userGoal?: string,
 ): Promise<{ valid: boolean; frama?: string }> {
   const pythonCmd = await getPythonCommand();
   const pathSep = os.platform() === "win32" ? ";" : ":";
@@ -308,7 +355,12 @@ async function runPythonScript(
   };
 
   return new Promise((resolve, reject) => {
-    const proc = cp.spawn(pythonCmd, [scriptPath, apiKey, provider], { env });
+    const args = [scriptPath, apiKey, provider];
+    if (userGoal) {
+      args.push(userGoal);
+    }
+
+    const proc = cp.spawn(pythonCmd, args, { env });
 
     proc.stdin.write(code);
     proc.stdin.end();

@@ -117,12 +117,16 @@ def run_frama_c(c_path: str, extra_args=None, timeout_sec=60):
         return False, str(e)
 
 
-def verify_c_code(user_code: str, user_api_key: str, api_provider: str):
+def verify_c_code(user_code: str, user_api_key: str, api_provider: str, user_goal: str = None):
     dprint(
-        f"verify_c_code: code_len={len(user_code) if user_code else 0}, provider={api_provider}"
+        f"verify_c_code: code_len={len(user_code) if user_code else 0}, provider={api_provider}, goal={user_goal}"
     )
     if not user_code:
         return {"valid": False, "error": "empty code"}
+
+    goal_instruction = ""
+    if user_goal:
+        goal_instruction = f"\n\nUSER VERIFICATION GOAL: The user specifically wants to verify the following property: '{user_goal}'. Ensure the ACSL specifications cover this requirement explicitly."
 
     prompt = (
         """
@@ -146,6 +150,9 @@ You are an expert in Frama-C/ACSL. Please verify my code (attached below)
     You must only write ACSL on top of the already implemented code, 
     and wrap the code in any function / include statements necessary to create a valid c program.
 It is vital that the generated code compiles to a valid C program.
+"""
+        + goal_instruction
+        + """
      Now, here is the code to be verified: [[[
 """
         + user_code
@@ -208,22 +215,27 @@ It is vital that the generated code compiles to a valid C program.
 
 def main():
     dprint(f"argv: {sys.argv}")
-    # Support two modes:
-    # 1) argv: script code api_key provider
-    # 2) argv: script api_key provider, code on stdin (recommended for long inputs)
-    if len(sys.argv) != 3:
-        dprint("WRONG!!!!")
+    # Support modes:
+    # 1) argv: script code api_key provider [user_goal]
+    # 2) argv: script api_key provider [user_goal], code on stdin
+    
+    if len(sys.argv) < 3:
+        dprint("WRONG ARGS!!!!")
         sys.exit(1)
+
     api_key = sys.argv[1]
     api_provider = sys.argv[2]
+    user_goal = sys.argv[3] if len(sys.argv) > 3 else None
+    
     dprint("mode: reading code from stdin")
     c_code = sys.stdin.read()
 
     dprint(
-        f"provider={api_provider}, api_key_len={len(api_key) if api_key else 0}, code_len={len(c_code)}"
+        f"provider={api_provider}, api_key_len={len(api_key) if api_key else 0}, code_len={len(c_code)}, goal={user_goal}"
     )
     try:
-        result = verify_c_code(c_code, api_key, api_provider)
+        result = verify_c_code(c_code, api_key, api_provider, user_goal)
+
         print(json.dumps(result))
     except Exception as e:
         dprint(f"unexpected error: {e}")
