@@ -124,13 +124,13 @@ async function ensureDependencies(
   );
 }
 
-async function configureApi(context: vscode.ExtensionContext) {
+async function configureApi(context: vscode.ExtensionContext): Promise<boolean> {
   const pick = await vscode.window.showQuickPick(
     PROVIDERS.map((p) => ({ label: p.label, description: p.id, id: p.id })),
     { placeHolder: "Select your LLM provider", ignoreFocusOut: true },
   );
   if (!pick) {
-    return;
+    return false;
   }
 
   const apiKey = await vscode.window.showInputBox({
@@ -140,7 +140,7 @@ async function configureApi(context: vscode.ExtensionContext) {
     validateInput: (v) => (v.trim() ? null : "API key cannot be empty"),
   });
   if (!apiKey) {
-    return;
+    return false;
   }
 
   await context.secrets.store(secretKey(pick.id as ProviderId), apiKey);
@@ -149,17 +149,16 @@ async function configureApi(context: vscode.ExtensionContext) {
     .update("provider", pick.id, vscode.ConfigurationTarget.Global);
 
   vscode.window.showInformationMessage(`${pick.label} API key saved.`);
+  return true;
 }
 
 async function getProviderAndKey(
-  context: vscode.ExtensionContext,
-  autoConfigure = true,
+  context: vscode.ExtensionContext
 ): Promise<{ provider: ProviderId; apiKey: string } | null> {
   const cfg = vscode.workspace.getConfiguration("doublecheckk");
-  let provider = cfg.get<ProviderId>("provider" , "openai");
+  let provider = cfg.get<ProviderId>("provider", "openai");
   const useEnv = cfg.get<boolean>("useEnvFile", true);
 
-  
   if (useEnv) {
     const workspaceFolders = vscode.workspace.workspaceFolders;
     if (workspaceFolders) {
@@ -187,7 +186,9 @@ async function getProviderAndKey(
             }
 
             if (envKey && foundProvider) {
-              outputChannel.appendLine(`Found API key for ${foundProvider} in .env file.`);
+              outputChannel.appendLine(
+                `Found API key for ${foundProvider} in .env file.`
+              );
               return { provider: foundProvider, apiKey: envKey.trim() };
             }
           } catch (e) {
@@ -199,26 +200,35 @@ async function getProviderAndKey(
     }
   }
 
-  // Check API key in secrets fallback to config (not sure config should exist)
+  // Check API key in secrets fallback to config
   const apiKey =
     (await context.secrets.get(secretKey(provider))) ??
     (cfg.get("apiKey") as string | undefined);
 
-  if (!apiKey) {
-    if (autoConfigure) {
-      await configureApi(context);
-      return getProviderAndKey(context, false);
-    }
-    const action = await vscode.window.showErrorMessage(
-      "Double-Checkk: API key not found.",
-      "Configure Key"
-    );
-    if (action === "Configure Key") {
-      vscode.commands.executeCommand("doublecheckk.configureApi");
-    }
-    return null;
+  if (apiKey) {
+    return { provider, apiKey };
   }
-  return { provider, apiKey };
+
+  // No key found. Prompt user.
+  const selection = await vscode.window.showWarningMessage(
+    "Double-Checkk: No API key found. You must configure one to proceed.",
+    "Configure API Key",
+    "Cancel"
+  );
+
+  if (selection === "Configure API Key") {
+    const configured = await configureApi(context);
+    if (configured) {
+      return getProviderAndKey(context);
+    } else {
+      vscode.window.showInformationMessage(
+        "Double-Checkk: Configuration cancelled."
+      );
+      return null;
+    }
+  }
+
+  return null;
 }
 
 let depsPathPromise: Promise<string>;
@@ -248,7 +258,7 @@ export async function activate(context: vscode.ExtensionContext) {
   context.subscriptions.push(
     vscode.commands.registerCommand("doublecheckk.configureApi", async () => {
       await depsPathPromise;
-      configureApi(context);
+      await configureApi(context);
     }),
     vscode.commands.registerCommand("doublecheckk.switchProvider", async () => {
       const cfg = vscode.workspace.getConfiguration("doublecheckk");
@@ -305,7 +315,7 @@ export async function activate(context: vscode.ExtensionContext) {
           placeHolder: "e.g. Ensure the result is non-negative",
         });
 
-        const creds = await getProviderAndKey(context, true);
+        const creds = await getProviderAndKey(context);
         if (!creds) {
           return;
         }
