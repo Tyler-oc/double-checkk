@@ -9,9 +9,6 @@ import subprocess
 import json
 import tempfile
 import time
-import requests
-
-import requests
 
 
 def dprint(msg: str):
@@ -91,28 +88,33 @@ def call_llm(chat_log, user_api_key, api_provider: str):
 
 
 def run_frama_c(c_path: str, extra_args=None, timeout_sec=60):
-    server_url = os.environ.get("FRAMAC_SERVER_URL", "https://your-future-cloud-run-url.a.run.app/verify")
-    with open(c_path, 'r') as f:
-        code_content = f.read()
     args = extra_args or ["-wp", "-wp-status-all", "-wp-rte", "-wp-prover", "z3"]
-    dprint(f"Sending code to remote Frama-C server at {server_url}")
+    cmd = ["frama-c", "-quiet"] + args + [c_path]
+    dprint(f"running: {' '.join(cmd)}")
+    t0 = time.time()
     try:
-        response = requests.post(
-            server_url, 
-            json={"code": code_content, "args": args},
-            timeout=timeout_sec
+        result = subprocess.run(
+            cmd, capture_output=True, text=True, timeout=timeout_sec
         )
-        response.raise_for_status()
-        result = response.json()
-        dprint(f"Remote Frama-C returned success={result.get('success')}")
-        return result.get("success", False), result.get("output", "")
-        
-    except requests.exceptions.Timeout:
-        dprint(f"Remote server timed out after {timeout_sec}s")
-        return False, "Remote Frama-C execution timed out."
+        dur = time.time() - t0
+        dprint(
+            f"frama-c: rc={result.returncode}, elapsed={dur:.2f}s, stdout_len={len(result.stdout)}, stderr_len={len(result.stderr)}"
+        )
+        full_output = (result.stdout or "") + "\n" + (result.stderr or "")
+        if result.stdout:
+            dprint("frama-c stdout (first 500 chars):\n" + result.stdout[:500])
+        if result.stderr:
+            dprint("frama-c stderr (first 500 chars):\n" + result.stderr[:500])
+        return result.returncode == 0, full_output
+    except subprocess.TimeoutExpired as e:
+        dprint(f"frama-c timeout after {timeout_sec}s")
+        return False, "Frama-C execution timed out."
+    except FileNotFoundError:
+        dprint("frama-c not found on PATH")
+        return False, "Frama-C executable not found."
     except Exception as e:
-        dprint(f"Remote server request failed: {e}")
-        return False, f"Failed to connect to Frama-C server: {str(e)}"
+        dprint(f"frama-c failed: {e}")
+        return False, str(e)
 
 
 def verify_c_code(user_code: str, user_api_key: str, api_provider: str, user_goal: str = None):
