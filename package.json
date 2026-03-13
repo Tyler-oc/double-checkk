@@ -76,7 +76,12 @@
           "type": "boolean",
           "default": true,
           "description": "When enabled, the extension will prioritize API keys found in a local .env file over global settings."
-        }
+        },
+        "doublecheckk.framaCServerUrl": {
+        "type": "string",
+        "default": "https://your-future-cloud-run-url.a.run.app/verify",
+        "description": "The URL of the remote Frama-C execution server."
+      }
       }
     }
   },

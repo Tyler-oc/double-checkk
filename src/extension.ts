@@ -469,12 +469,15 @@ async function runPythonScript(
   const pythonCmd = await getPythonCommand();
   const pathSep = os.platform() === "win32" ? ";" : ":";
 
+  const config = vscode.workspace.getConfiguration("doublecheckk");
+  const serverUrl = config.get<string>("framaCServerUrl", "https://your-future-cloud-run-url.a.run.app/verify");
   // Merge PYTHONPATH properly
   const env = {
     ...process.env,
     PYTHONPATH: process.env.PYTHONPATH
       ? `${depsPath}${pathSep}${process.env.PYTHONPATH}`
       : depsPath,
+    FRAMAC_SERVER_URL: serverUrl // Injecting the remote URL here
   };
 
   return new Promise((resolve, reject) => {
