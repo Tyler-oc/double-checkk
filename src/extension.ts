@@ -77,30 +77,78 @@ async function ensureDependencies(
 async function configureApi(
   context: vscode.ExtensionContext,
 ): Promise<boolean> {
-  const pick = await vscode.window.showQuickPick(
+  // 1. Ask the user for their preferred key storage method FIRST
+  const storagePick = await vscode.window.showQuickPick(
+    [
+      {
+        label: "$(shield) Enter a Global API Key",
+        description: "Save securely in VS Code's secret storage",
+        id: "global",
+      },
+      {
+        label: "$(file-code) Use Workspace .env File",
+        description: "Read the key automatically from your project's .env file",
+        id: "env",
+      },
+    ],
+    {
+      placeHolder: "How would you like Double-Checkk to read your API key?",
+      ignoreFocusOut: true,
+    },
+  );
+
+  if (!storagePick) {
+    return false;
+  }
+
+  const useEnv = storagePick.id === "env";
+  const cfg = vscode.workspace.getConfiguration("doublecheckk");
+
+  // Save their storage preference globally
+  await cfg.update("useEnvFile", useEnv, vscode.ConfigurationTarget.Global);
+
+  // 2. Ask for the LLM Provider
+  const providerPick = await vscode.window.showQuickPick(
     PROVIDERS.map((p) => ({ label: p.label, description: p.id, id: p.id })),
     { placeHolder: "Select your LLM provider", ignoreFocusOut: true },
   );
-  if (!pick) {
+
+  if (!providerPick) {
     return false;
   }
 
-  const apiKey = await vscode.window.showInputBox({
-    prompt: `Enter API key for ${pick.label}`,
-    password: true,
-    ignoreFocusOut: true,
-    validateInput: (v) => (v.trim() ? null : "API key cannot be empty"),
-  });
-  if (!apiKey) {
-    return false;
+  await cfg.update(
+    "provider",
+    providerPick.id,
+    vscode.ConfigurationTarget.Global,
+  );
+
+  // 3. Prompt for the key OR instruct them to create the .env
+  if (!useEnv) {
+    const apiKey = await vscode.window.showInputBox({
+      prompt: `Enter API key for ${providerPick.label}`,
+      password: true,
+      ignoreFocusOut: true,
+      validateInput: (v) => (v.trim() ? null : "API key cannot be empty"),
+    });
+
+    if (!apiKey) {
+      return false;
+    }
+
+    await context.secrets.store(
+      secretKey(providerPick.id as ProviderId),
+      apiKey,
+    );
+    vscode.window.showInformationMessage(
+      `Double-Checkk: ${providerPick.label} API key saved securely.`,
+    );
+  } else {
+    vscode.window.showInformationMessage(
+      `Double-Checkk is now configured to use a .env file. Please ensure your ${providerPick.label} key is saved in your workspace!`,
+    );
   }
 
-  await context.secrets.store(secretKey(pick.id as ProviderId), apiKey);
-  await vscode.workspace
-    .getConfiguration("doublecheckk")
-    .update("provider", pick.id, vscode.ConfigurationTarget.Global);
-
-  vscode.window.showInformationMessage(`${pick.label} API key saved.`);
   return true;
 }
 
@@ -137,12 +185,28 @@ async function getProviderAndKey(
               }
             }
 
-            // FIX: Ensure envKey is not just whitespace before accepting it
             if (envKey.trim() && foundProvider) {
-              outputChannel.appendLine(
-                `Found API key for ${foundProvider} in .env file.`,
+              // 1. Pause execution and ask for explicit permission
+              const userConsent = await vscode.window.showInformationMessage(
+                `Double-Checkk found a ${foundProvider.toUpperCase()} API key in your workspace .env file. Allow the extension to use this key?`,
+                { modal: true }, // Makes it a blocking center-screen popup rather than a passive toast
+                "Yes, allow",
+                "No, ignore .env",
               );
-              return { provider: foundProvider, apiKey: envKey.trim() };
+
+              // 2. Handle their choice
+              if (userConsent === "Yes, allow") {
+                outputChannel.appendLine(
+                  `User explicitly approved API key for ${foundProvider} from .env.`,
+                );
+                return { provider: foundProvider, apiKey: envKey.trim() };
+              } else {
+                outputChannel.appendLine(
+                  `User declined to use the .env key. Falling back to global config.`,
+                );
+                // By doing nothing here, the function naturally breaks out of the loop
+                // and falls down to the `context.secrets.get(...)` check below.
+              }
             }
           } catch (e) {
             console.error("Error reading .env file:", e);
@@ -153,30 +217,41 @@ async function getProviderAndKey(
     }
   }
 
-  const apiKey =
-    (await context.secrets.get(secretKey(provider))) ??
-    (cfg.get("apiKey") as string | undefined);
-
-  // FIX: Ensure apiKey is truthy AND not an empty string
-  if (apiKey && apiKey.trim() !== "") {
-    return { provider, apiKey: apiKey.trim() };
-  }
-
-  // FIX: Skip the passive warning and directly prompt them to configure
+  // If we reach this point, no key was found. Prompt user directly.
   vscode.window.showInformationMessage(
-    "Double-Checkk: API Key required. Please select your provider.",
+    "Double-Checkk: Let's get your API Key configured before verifying.",
   );
+
   const configured = await configureApi(context);
 
   if (configured) {
-    // If they successfully configured it, run this function again to grab the new key
-    return await getProviderAndKey(context);
+    // Check what they just selected
+    const updatedUseEnv = vscode.workspace
+      .getConfiguration("doublecheckk")
+      .get<boolean>("useEnvFile");
+
+    if (updatedUseEnv) {
+      // If they chose .env, they likely haven't created the file yet.
+      // Return null to exit the command cleanly so they can go make the file.
+      return null;
+    } else {
+      // If they chose global, they just typed it in. We can safely grab it and continue.
+      const newProvider = vscode.workspace
+        .getConfiguration("doublecheckk")
+        .get<ProviderId>("provider", "openai");
+      const newKey = await context.secrets.get(secretKey(newProvider));
+
+      if (newKey) {
+        return { provider: newProvider, apiKey: newKey };
+      }
+    }
   } else {
     vscode.window.showWarningMessage(
       "Double-Checkk: Verification cancelled. No API key configured.",
     );
-    return null;
   }
+
+  return null;
 }
 
 let depsPathPromise: Promise<string>;
