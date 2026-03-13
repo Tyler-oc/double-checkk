@@ -137,7 +137,8 @@ async function getProviderAndKey(
               }
             }
 
-            if (envKey && foundProvider) {
+            // FIX: Ensure envKey is not just whitespace before accepting it
+            if (envKey.trim() && foundProvider) {
               outputChannel.appendLine(
                 `Found API key for ${foundProvider} in .env file.`,
               );
@@ -152,35 +153,30 @@ async function getProviderAndKey(
     }
   }
 
-  // Check API key in secrets fallback to config
   const apiKey =
     (await context.secrets.get(secretKey(provider))) ??
     (cfg.get("apiKey") as string | undefined);
 
-  if (apiKey) {
-    return { provider, apiKey };
+  // FIX: Ensure apiKey is truthy AND not an empty string
+  if (apiKey && apiKey.trim() !== "") {
+    return { provider, apiKey: apiKey.trim() };
   }
 
-  // No key found. Prompt user.
-  const selection = await vscode.window.showWarningMessage(
-    "Double-Checkk: No API key found. You must configure one to proceed.",
-    "Configure API Key",
-    "Cancel",
+  // FIX: Skip the passive warning and directly prompt them to configure
+  vscode.window.showInformationMessage(
+    "Double-Checkk: API Key required. Please select your provider.",
   );
+  const configured = await configureApi(context);
 
-  if (selection === "Configure API Key") {
-    const configured = await configureApi(context);
-    if (configured) {
-      return getProviderAndKey(context);
-    } else {
-      vscode.window.showInformationMessage(
-        "Double-Checkk: Configuration cancelled.",
-      );
-      return null;
-    }
+  if (configured) {
+    // If they successfully configured it, run this function again to grab the new key
+    return await getProviderAndKey(context);
+  } else {
+    vscode.window.showWarningMessage(
+      "Double-Checkk: Verification cancelled. No API key configured.",
+    );
+    return null;
   }
-
-  return null;
 }
 
 let depsPathPromise: Promise<string>;
@@ -274,6 +270,7 @@ export async function activate(context: vscode.ExtensionContext) {
   );
 
   context.subscriptions.push(
+    // Inside your activate function...
     vscode.commands.registerCommand(
       "doublecheckk.verifySelection",
       async () => {
@@ -284,7 +281,10 @@ export async function activate(context: vscode.ExtensionContext) {
         }
 
         const selection = editor.document.getText(editor.selection);
-        if (!selection) {
+        if (!selection.trim()) {
+          vscode.window.showErrorMessage(
+            "Double-Checkk: Please select some C code to verify.",
+          );
           return;
         }
 
@@ -293,13 +293,19 @@ export async function activate(context: vscode.ExtensionContext) {
           placeHolder: "e.g. Ensure the result is non-negative",
         });
 
+        // FIX: If the user hits 'Escape' on the input box, userGoal is undefined. We should gracefully cancel.
+        if (userGoal === undefined) {
+          return;
+        }
+
         const creds = await getProviderAndKey(context);
         if (!creds) {
-          configureApi(context);
           return;
         }
 
         vscode.window.showInformationMessage("Verifying selection...");
+
+        // ... (rest of your try/catch execution block remains exactly the same)
 
         try {
           const pyPath = context.asAbsolutePath(
