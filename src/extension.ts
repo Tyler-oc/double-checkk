@@ -42,56 +42,6 @@ function commandExists(cmd: string): boolean {
   }
 }
 
-async function installFrama(): Promise<boolean> {
-  if (commandExists("frama-c")) {
-    return true;
-  }
-
-  const result = await vscode.window.showQuickPick(["Yes", "No"], {
-    placeHolder: "Frama-C not found. Would you like to install it?",
-  });
-
-  if (result !== "Yes") {
-    vscode.window.showInformationMessage(
-      "Installation cancelled. Frama-C is required.",
-    );
-    return false;
-  }
-
-  const platform = os.platform();
-  const terminal = vscode.window.createTerminal("Frama-C Installer");
-  terminal.show();
-
-  if (platform === "darwin") {
-    if (!commandExists("brew")) {
-      vscode.window.showErrorMessage("Homebrew is required on macOS.");
-      return false;
-    }
-    terminal.sendText("brew update && brew install frama-c");
-  } else if (platform === "linux") {
-    if (commandExists("apt")) {
-      terminal.sendText("sudo apt update && sudo apt install -y frama-c");
-    } else if (commandExists("dnf")) {
-      terminal.sendText("sudo dnf install -y frama-c");
-    } else if (commandExists("pacman")) {
-      terminal.sendText("sudo pacman -S --noconfirm frama-c");
-    } else {
-      vscode.window.showErrorMessage(
-        "Unsupported Linux package manager. Install frama-c manually.",
-      );
-      return false;
-    }
-  } else {
-    vscode.window.showErrorMessage("Frama-C requires Linux/WSL or macOS.");
-    return false;
-  }
-
-  vscode.window.showInformationMessage(
-    "Check the terminal to complete Frama-C installation.",
-  );
-  return true;
-}
-
 async function ensureDependencies(
   context: vscode.ExtensionContext,
 ): Promise<string> {
@@ -124,7 +74,9 @@ async function ensureDependencies(
   );
 }
 
-async function configureApi(context: vscode.ExtensionContext): Promise<boolean> {
+async function configureApi(
+  context: vscode.ExtensionContext,
+): Promise<boolean> {
   const pick = await vscode.window.showQuickPick(
     PROVIDERS.map((p) => ({ label: p.label, description: p.id, id: p.id })),
     { placeHolder: "Select your LLM provider", ignoreFocusOut: true },
@@ -153,7 +105,7 @@ async function configureApi(context: vscode.ExtensionContext): Promise<boolean> 
 }
 
 async function getProviderAndKey(
-  context: vscode.ExtensionContext
+  context: vscode.ExtensionContext,
 ): Promise<{ provider: ProviderId; apiKey: string } | null> {
   const cfg = vscode.workspace.getConfiguration("doublecheckk");
   let provider = cfg.get<ProviderId>("provider", "openai");
@@ -187,7 +139,7 @@ async function getProviderAndKey(
 
             if (envKey && foundProvider) {
               outputChannel.appendLine(
-                `Found API key for ${foundProvider} in .env file.`
+                `Found API key for ${foundProvider} in .env file.`,
               );
               return { provider: foundProvider, apiKey: envKey.trim() };
             }
@@ -213,7 +165,7 @@ async function getProviderAndKey(
   const selection = await vscode.window.showWarningMessage(
     "Double-Checkk: No API key found. You must configure one to proceed.",
     "Configure API Key",
-    "Cancel"
+    "Cancel",
   );
 
   if (selection === "Configure API Key") {
@@ -222,7 +174,7 @@ async function getProviderAndKey(
       return getProviderAndKey(context);
     } else {
       vscode.window.showInformationMessage(
-        "Double-Checkk: Configuration cancelled."
+        "Double-Checkk: Configuration cancelled.",
       );
       return null;
     }
@@ -238,20 +190,23 @@ export async function activate(context: vscode.ExtensionContext) {
 
   depsPathPromise = ensureDependencies(context);
 
-  installFrama();
-
-  const statusBarItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 100);
+  const statusBarItem = vscode.window.createStatusBarItem(
+    vscode.StatusBarAlignment.Right,
+    100,
+  );
   statusBarItem.command = "doublecheckk.switchProvider";
   context.subscriptions.push(statusBarItem);
 
   const updateStatusBar = () => {
-    const provider = vscode.workspace.getConfiguration("doublecheckk").get("provider", "openai");
+    const provider = vscode.workspace
+      .getConfiguration("doublecheckk")
+      .get("provider", "openai");
     statusBarItem.text = `$(sparkle) Double-Checkk: ${provider.toUpperCase()}`;
     statusBarItem.show();
   };
 
   updateStatusBar();
-  vscode.workspace.onDidChangeConfiguration(e => {
+  vscode.workspace.onDidChangeConfiguration((e) => {
     if (e.affectsConfiguration("doublecheckk")) updateStatusBar();
   });
 
@@ -266,13 +221,26 @@ export async function activate(context: vscode.ExtensionContext) {
       const useEnv = cfg.get("useEnvFile");
 
       const options = [
-        { label: "$(hubot) Change LLM Provider", description: `Currently using ${currentProvider}`, id: "change_provider" },
-        { label: "$(key) Reset/Update API Key", description: "Overwrite existing global key", id: "reset_key" },
-        { label: useEnv ? "$(file-code) Disable .env Priority" : "$(file-code) Enable .env Priority", id: "toggle_env" }
+        {
+          label: "$(hubot) Change LLM Provider",
+          description: `Currently using ${currentProvider}`,
+          id: "change_provider",
+        },
+        {
+          label: "$(key) Reset/Update API Key",
+          description: "Overwrite existing global key",
+          id: "reset_key",
+        },
+        {
+          label: useEnv
+            ? "$(file-code) Disable .env Priority"
+            : "$(file-code) Enable .env Priority",
+          id: "toggle_env",
+        },
       ];
 
       const selection = await vscode.window.showQuickPick(options, {
-        placeHolder: "Double-Checkk Settings"
+        placeHolder: "Double-Checkk Settings",
       });
 
       if (!selection) {
@@ -283,14 +251,24 @@ export async function activate(context: vscode.ExtensionContext) {
         // Re-use your existing configureApi logic or a simpler version:
         const pick = await vscode.window.showQuickPick(PROVIDERS);
         if (pick) {
-          await cfg.update("provider", pick.id, vscode.ConfigurationTarget.Global);
+          await cfg.update(
+            "provider",
+            pick.id,
+            vscode.ConfigurationTarget.Global,
+          );
           vscode.window.showInformationMessage(`Switched to ${pick.label}`);
         }
       } else if (selection.id === "reset_key") {
         await configureApi(context);
       } else if (selection.id === "toggle_env") {
-        await cfg.update("useEnvFile", !useEnv, vscode.ConfigurationTarget.Global);
-        vscode.window.showInformationMessage(`.env priority is now ${!useEnv ? "Enabled" : "Disabled"}`);
+        await cfg.update(
+          "useEnvFile",
+          !useEnv,
+          vscode.ConfigurationTarget.Global,
+        );
+        vscode.window.showInformationMessage(
+          `.env priority is now ${!useEnv ? "Enabled" : "Disabled"}`,
+        );
       }
     }),
   );
@@ -317,6 +295,7 @@ export async function activate(context: vscode.ExtensionContext) {
 
         const creds = await getProviderAndKey(context);
         if (!creds) {
+          configureApi(context);
           return;
         }
 
