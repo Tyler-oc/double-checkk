@@ -5,7 +5,7 @@ FROM ubuntu:22.04
 ENV DEBIAN_FRONTEND=noninteractive
 
 # 3. Install core system dependencies
-# Frama-C requires m4, gmp, and z3 for the WP (Weakest Precondition) plugin
+# Added autoconf and graphviz to satisfy Frama-C's opam requirements
 RUN apt-get update && apt-get install -y \
     build-essential \
     curl \
@@ -18,6 +18,8 @@ RUN apt-get update && apt-get install -y \
     python3 \
     python3-pip \
     opam \
+    autoconf \
+    graphviz \
     && rm -rf /var/lib/apt/lists/*
 
 # 4. Initialize OPAM 
