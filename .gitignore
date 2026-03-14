@@ -44,6 +44,8 @@ esy.lock/
 # macOS
 .DS_Store
 
+out/
+
 # Windows
 Thumbs.db
 
