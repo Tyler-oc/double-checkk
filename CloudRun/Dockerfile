@@ -49,6 +49,9 @@ WORKDIR /app
 COPY requirements.txt .
 RUN pip3 install --no-cache-dir -r requirements.txt
 
+
+ENV CACHE_BUSTER=2026-03-14
+
 # Copy your Python handler, LLM script, and FastAPI web server
 COPY . /app
 
