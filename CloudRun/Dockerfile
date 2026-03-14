@@ -5,8 +5,8 @@ FROM ubuntu:22.04
 ENV DEBIAN_FRONTEND=noninteractive
 
 # 3. Install core system dependencies
-# Added autoconf and graphviz to satisfy Frama-C's opam requirements
-RUN apt-get update && apt-get install -y \
+# Added autoconf, graphviz, and GTK3 headers to satisfy Frama-C GUI dependencies
+RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y \
     build-essential \
     curl \
     git \
@@ -20,6 +20,8 @@ RUN apt-get update && apt-get install -y \
     opam \
     autoconf \
     graphviz \
+    libgtk-3-dev \
+    libgtksourceview-3.0-dev \
     && rm -rf /var/lib/apt/lists/*
 
 # 4. Initialize OPAM 
