@@ -1,325 +1,52 @@
 import * as vscode from "vscode";
-import * as cp from "child_process";
-import * as path from "path";
-import * as fs from "fs";
-import { promisify } from "util";
-import os from "os";
-import { ConfigurationTarget } from "vscode";
+import { setupStatusBar } from "./ui/statusBar";
+import { configureApi, getProviderAndKey, PROVIDERS } from "./auth/secrets";
+import { verifyCodeOnCloud } from "./api/network";
 
-const outputChannel = vscode.window.createOutputChannel("Python-debug");
-
-type ProviderId = "openai" | "anthropic" | "google";
-const PROVIDERS: { id: ProviderId; label: string }[] = [
-  { id: "openai", label: "OpenAI (ChatGPT)" },
-  { id: "anthropic", label: "Anthropic (Claude)" },
-  { id: "google", label: "Google (Gemini)" },
-];
-
-const secretKey = (p: ProviderId) => `doublecheckk.apiKey.${p}`;
-const execPromise = promisify(cp.exec);
-
-async function getPythonCommand(): Promise<string> {
-  for (const cmd of ["python3", "python"]) {
-    try {
-      cp.execSync(`${cmd} --version`, { stdio: "ignore" });
-      return cmd;
-    } catch {
-      continue;
-    }
-  }
-  throw new Error("Python not found. Please install Python 3.");
-}
-
-function commandExists(cmd: string): boolean {
-  try {
-    cp.execSync(
-      os.platform() === "win32" ? `where ${cmd}` : `command -v ${cmd}`,
-      { stdio: "ignore" },
-    );
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-async function ensureDependencies(
-  context: vscode.ExtensionContext,
-): Promise<string> {
-  const depsPath = path.join(context.globalStorageUri.fsPath, "python-deps");
-  const flagFile = path.join(depsPath, ".installed");
-
-  if (fs.existsSync(flagFile)) {
-    return depsPath;
-  }
-
-  return await vscode.window.withProgress<string>(
-    {
-      location: vscode.ProgressLocation.Notification,
-      title: "Installing Python dependencies...",
-    },
-    async () => {
-      if (!fs.existsSync(depsPath)) {
-        fs.mkdirSync(depsPath, { recursive: true });
-      }
-      const reqPath = path.join(context.extensionPath, "requirements.txt");
-
-      const pythonCmd = await getPythonCommand();
-      await execPromise(
-        `${pythonCmd} -m pip install -r "${reqPath}" --target "${depsPath}"`,
-      );
-
-      fs.writeFileSync(flagFile, new Date().toISOString());
-      return depsPath;
-    },
-  );
-}
-
-async function configureApi(
-  context: vscode.ExtensionContext,
-): Promise<boolean> {
-  // 1. Ask the user for their preferred key storage method FIRST
-  const storagePick = await vscode.window.showQuickPick(
-    [
-      {
-        label: "$(shield) Enter a Global API Key",
-        description: "Save securely in VS Code's secret storage",
-        id: "global",
-      },
-      {
-        label: "$(file-code) Use Workspace .env File",
-        description: "Read the key automatically from your project's .env file",
-        id: "env",
-      },
-    ],
-    {
-      placeHolder: "How would you like Double-Checkk to read your API key?",
-      ignoreFocusOut: true,
-    },
-  );
-
-  if (!storagePick) {
-    return false;
-  }
-
-  const useEnv = storagePick.id === "env";
-  const cfg = vscode.workspace.getConfiguration("doublecheckk");
-
-  // Save their storage preference globally
-  await cfg.update("useEnvFile", useEnv, vscode.ConfigurationTarget.Global);
-
-  // 2. Ask for the LLM Provider
-  const providerPick = await vscode.window.showQuickPick(
-    PROVIDERS.map((p) => ({ label: p.label, description: p.id, id: p.id })),
-    { placeHolder: "Select your LLM provider", ignoreFocusOut: true },
-  );
-
-  if (!providerPick) {
-    return false;
-  }
-
-  await cfg.update(
-    "provider",
-    providerPick.id,
-    vscode.ConfigurationTarget.Global,
-  );
-
-  // 3. Prompt for the key OR instruct them to create the .env
-  if (!useEnv) {
-    const apiKey = await vscode.window.showInputBox({
-      prompt: `Enter API key for ${providerPick.label}`,
-      password: true,
-      ignoreFocusOut: true,
-      validateInput: (v) => (v.trim() ? null : "API key cannot be empty"),
-    });
-
-    if (!apiKey) {
-      return false;
-    }
-
-    await context.secrets.store(
-      secretKey(providerPick.id as ProviderId),
-      apiKey,
-    );
-    vscode.window.showInformationMessage(
-      `Double-Checkk: ${providerPick.label} API key saved securely.`,
-    );
-  } else {
-    vscode.window.showInformationMessage(
-      `Double-Checkk is now configured to use a .env file. Please ensure your ${providerPick.label} key is saved in your workspace!`,
-    );
-  }
-
-  return true;
-}
-
-async function getProviderAndKey(
-  context: vscode.ExtensionContext,
-): Promise<{ provider: ProviderId; apiKey: string } | null> {
-  const cfg = vscode.workspace.getConfiguration("doublecheckk");
-  let provider = cfg.get<ProviderId>("provider", "openai");
-  const useEnv = cfg.get<boolean>("useEnvFile", true);
-
-  if (useEnv) {
-    const workspaceFolders = vscode.workspace.workspaceFolders;
-    if (workspaceFolders) {
-      for (const folder of workspaceFolders) {
-        const envPath = path.join(folder.uri.fsPath, ".env");
-        if (fs.existsSync(envPath)) {
-          try {
-            const envContent = fs.readFileSync(envPath, "utf-8");
-            const envLines = envContent.split("\n");
-            let envKey = "";
-            let foundProvider: ProviderId | null = null;
-
-            for (const line of envLines) {
-              const trimmed = line.trim();
-              if (trimmed.startsWith("OPENAI_API_KEY=")) {
-                envKey = trimmed.split("=", 2)[1];
-                foundProvider = "openai";
-              } else if (trimmed.startsWith("ANTHROPIC_API_KEY=")) {
-                envKey = trimmed.split("=", 2)[1];
-                foundProvider = "anthropic";
-              } else if (trimmed.startsWith("GOOGLE_API_KEY=")) {
-                envKey = trimmed.split("=", 2)[1];
-                foundProvider = "google";
-              }
-            }
-
-            if (envKey.trim() && foundProvider) {
-              // 1. Pause execution and ask for explicit permission
-              const userConsent = await vscode.window.showInformationMessage(
-                `Double-Checkk found a ${foundProvider.toUpperCase()} API key in your workspace .env file. Allow the extension to use this key?`,
-                { modal: true }, // Makes it a blocking center-screen popup rather than a passive toast
-                "Yes, allow",
-                "No, ignore .env",
-              );
-
-              // 2. Handle their choice
-              if (userConsent === "Yes, allow") {
-                outputChannel.appendLine(
-                  `User explicitly approved API key for ${foundProvider} from .env.`,
-                );
-                return { provider: foundProvider, apiKey: envKey.trim() };
-              } else {
-                outputChannel.appendLine(
-                  `User declined to use the .env key. Falling back to global config.`,
-                );
-                // By doing nothing here, the function naturally breaks out of the loop
-                // and falls down to the `context.secrets.get(...)` check below.
-              }
-            }
-          } catch (e) {
-            console.error("Error reading .env file:", e);
-            outputChannel.appendLine(`Error reading .env file: ${e}`);
-          }
-        }
-      }
-    }
-  }
-
-  // If we reach this point, no key was found. Prompt user directly.
-  vscode.window.showInformationMessage(
-    "Double-Checkk: Let's get your API Key configured before verifying.",
-  );
-
-  const configured = await configureApi(context);
-
-  if (configured) {
-    // Check what they just selected
-    const updatedUseEnv = vscode.workspace
-      .getConfiguration("doublecheckk")
-      .get<boolean>("useEnvFile");
-
-    if (updatedUseEnv) {
-      // If they chose .env, they likely haven't created the file yet.
-      // Return null to exit the command cleanly so they can go make the file.
-      return null;
-    } else {
-      // If they chose global, they just typed it in. We can safely grab it and continue.
-      const newProvider = vscode.workspace
-        .getConfiguration("doublecheckk")
-        .get<ProviderId>("provider", "openai");
-      const newKey = await context.secrets.get(secretKey(newProvider));
-
-      if (newKey) {
-        return { provider: newProvider, apiKey: newKey };
-      }
-    }
-  } else {
-    vscode.window.showWarningMessage(
-      "Double-Checkk: Verification cancelled. No API key configured.",
-    );
-  }
-
-  return null;
-}
-
-let depsPathPromise: Promise<string>;
+const outputChannel = vscode.window.createOutputChannel("Double-Checkk");
 
 export async function activate(context: vscode.ExtensionContext) {
   outputChannel.appendLine("Double-Checkk extension activating...");
 
-  depsPathPromise = ensureDependencies(context);
-
-  const statusBarItem = vscode.window.createStatusBarItem(
-    vscode.StatusBarAlignment.Right,
-    100,
-  );
-  statusBarItem.command = "doublecheckk.switchProvider";
-  context.subscriptions.push(statusBarItem);
-
-  const updateStatusBar = () => {
-    const provider = vscode.workspace
-      .getConfiguration("doublecheckk")
-      .get("provider", "openai");
-    statusBarItem.text = `$(sparkle) Double-Checkk: ${provider.toUpperCase()}`;
-    statusBarItem.show();
-  };
-
-  updateStatusBar();
-  vscode.workspace.onDidChangeConfiguration((e) => {
-    if (e.affectsConfiguration("doublecheckk")) updateStatusBar();
-  });
+  setupStatusBar(context);
 
   context.subscriptions.push(
-    vscode.commands.registerCommand("doublecheckk.configureApi", async () => {
-      await depsPathPromise;
-      await configureApi(context);
-    }),
+    vscode.commands.registerCommand("doublecheckk.configureApi", () =>
+      configureApi(context, outputChannel),
+    ),
+
     vscode.commands.registerCommand("doublecheckk.switchProvider", async () => {
       const cfg = vscode.workspace.getConfiguration("doublecheckk");
       const currentProvider = cfg.get("provider");
       const useEnv = cfg.get("useEnvFile");
 
-      const options = [
-        {
-          label: "$(hubot) Change LLM Provider",
-          description: `Currently using ${currentProvider}`,
-          id: "change_provider",
-        },
-        {
-          label: "$(key) Reset/Update API Key",
-          description: "Overwrite existing global key",
-          id: "reset_key",
-        },
-        {
-          label: useEnv
-            ? "$(file-code) Disable .env Priority"
-            : "$(file-code) Enable .env Priority",
-          id: "toggle_env",
-        },
-      ];
-
-      const selection = await vscode.window.showQuickPick(options, {
-        placeHolder: "Double-Checkk Settings",
-      });
+      const selection = await vscode.window.showQuickPick(
+        [
+          {
+            label: "$(hubot) Change LLM Provider",
+            description: `Currently using ${currentProvider}`,
+            id: "change_provider",
+          },
+          {
+            label: "$(key) Reset/Update API Key",
+            description: "Overwrite existing global key",
+            id: "reset_key",
+          },
+          {
+            label: useEnv
+              ? "$(file-code) Disable .env Priority"
+              : "$(file-code) Enable .env Priority",
+            id: "toggle_env",
+          },
+        ],
+        { placeHolder: "Double-Checkk Settings" },
+      );
 
       if (!selection) {
         return;
       }
 
       if (selection.id === "change_provider") {
-        // Re-use your existing configureApi logic or a simpler version:
         const pick = await vscode.window.showQuickPick(PROVIDERS);
         if (pick) {
           await cfg.update(
@@ -330,7 +57,7 @@ export async function activate(context: vscode.ExtensionContext) {
           vscode.window.showInformationMessage(`Switched to ${pick.label}`);
         }
       } else if (selection.id === "reset_key") {
-        await configureApi(context);
+        await configureApi(context, outputChannel);
       } else if (selection.id === "toggle_env") {
         await cfg.update(
           "useEnvFile",
@@ -342,10 +69,7 @@ export async function activate(context: vscode.ExtensionContext) {
         );
       }
     }),
-  );
 
-  context.subscriptions.push(
-    // Inside your activate function...
     vscode.commands.registerCommand(
       "doublecheckk.verifySelection",
       async () => {
@@ -355,8 +79,8 @@ export async function activate(context: vscode.ExtensionContext) {
           return;
         }
 
-        const selection = editor.document.getText(editor.selection);
-        if (!selection.trim()) {
+        const selectionText = editor.document.getText(editor.selection);
+        if (!selectionText.trim()) {
           vscode.window.showErrorMessage(
             "Double-Checkk: Please select some C code to verify.",
           );
@@ -368,72 +92,78 @@ export async function activate(context: vscode.ExtensionContext) {
           placeHolder: "e.g. Ensure the result is non-negative",
         });
 
-        // FIX: If the user hits 'Escape' on the input box, userGoal is undefined. We should gracefully cancel.
         if (userGoal === undefined) {
           return;
-        }
+        } // User pressed Escape
 
-        const creds = await getProviderAndKey(context);
+        const creds = await getProviderAndKey(context, outputChannel);
         if (!creds) {
           return;
         }
 
-        vscode.window.showInformationMessage("Verifying selection...");
-
-        // ... (rest of your try/catch execution block remains exactly the same)
-
-        try {
-          const pyPath = context.asAbsolutePath(
-            path.join("python_scripts", "frama_c.py"),
-          );
-          const depsPath = await depsPathPromise;
-
-          const result = await runPythonScript(
-            pyPath,
-            selection,
-            creds.provider,
-            creds.apiKey,
-            depsPath,
-            userGoal,
-          );
-
-          const action = await vscode.window.showInformationMessage(
-            result.valid
-              ? "Code successfully validated"
-              : "Could not validate code.",
-            "Show details",
-          );
-
-          if (action === "Show details") {
-            const framaText =
-              result.frama?.trim() || "// No Frama-C details returned.";
-            const doc = await vscode.workspace.openTextDocument({
-              content: framaText,
-              language: "c",
-            });
-            await vscode.window.showTextDocument(doc, { preview: true });
-
-            const replace = await vscode.window.showInformationMessage(
-              "Apply annotations?",
-              "Replace selection",
-              "Skip",
-            );
-            if (replace === "Replace selection") {
-              await editor.edit((ed) =>
-                ed.replace(editor.selection, framaText),
-              );
-            }
-          }
-        } catch (err: any) {
+        const cfg = vscode.workspace.getConfiguration("doublecheckk");
+        const apiUrl = cfg.get<string>("apiUrl");
+        if (!apiUrl) {
           vscode.window.showErrorMessage(
-            `Error: ${err?.message ?? String(err)}`,
+            "Double-Checkk: API URL is missing from settings.",
           );
+          return;
         }
+
+        vscode.window.withProgress(
+          {
+            location: vscode.ProgressLocation.Notification,
+            title: "Double-Checkk: Formally verifying code...",
+            cancellable: false,
+          },
+          async () => {
+            try {
+              const result = await verifyCodeOnCloud(
+                apiUrl,
+                selectionText,
+                creds.provider,
+                creds.apiKey,
+                userGoal || null,
+              );
+
+              const action = await vscode.window.showInformationMessage(
+                result.valid
+                  ? "Code successfully validated"
+                  : "Could not validate code.",
+                "Show details",
+              );
+
+              if (action === "Show details" && result.frama) {
+                const doc = await vscode.workspace.openTextDocument({
+                  content: result.frama,
+                  language: "c",
+                });
+                await vscode.window.showTextDocument(doc, { preview: true });
+
+                const replace = await vscode.window.showInformationMessage(
+                  "Apply annotations?",
+                  "Replace selection",
+                  "Skip",
+                );
+                if (replace === "Replace selection") {
+                  await editor.edit((ed) =>
+                    ed.replace(editor.selection, result.frama!),
+                  );
+                }
+              }
+            } catch (err: any) {
+              vscode.window.showErrorMessage(
+                `Verification Error: ${err.message}`,
+              );
+              outputChannel.appendLine(`[Error]: ${err.message}`);
+            }
+          },
+        );
       },
     ),
   );
 
-  // Code Action Provider registration remains the same...
+  // QuickFix Code Action Provider
   context.subscriptions.push(
     vscode.languages.registerCodeActionsProvider(
       { scheme: "file" },
@@ -458,58 +188,4 @@ export async function activate(context: vscode.ExtensionContext) {
   );
 }
 
-async function runPythonScript(
-  scriptPath: string,
-  code: string,
-  provider: ProviderId,
-  apiKey: string,
-  depsPath: string,
-  userGoal?: string,
-): Promise<{ valid: boolean; frama?: string }> {
-  const pythonCmd = await getPythonCommand();
-  const pathSep = os.platform() === "win32" ? ";" : ":";
-
-  const config = vscode.workspace.getConfiguration("doublecheckk");
-  const serverUrl = config.get<string>("framaCServerUrl", "https://your-future-cloud-run-url.a.run.app/verify");
-  // Merge PYTHONPATH properly
-  const env = {
-    ...process.env,
-    PYTHONPATH: process.env.PYTHONPATH
-      ? `${depsPath}${pathSep}${process.env.PYTHONPATH}`
-      : depsPath,
-    FRAMAC_SERVER_URL: serverUrl // Injecting the remote URL here
-  };
-
-  return new Promise((resolve, reject) => {
-    const args = [scriptPath, apiKey, provider];
-    if (userGoal) {
-      args.push(userGoal);
-    }
-
-    const proc = cp.spawn(pythonCmd, args, { env });
-
-    proc.stdin.write(code);
-    proc.stdin.end();
-
-    let stdoutData = "";
-    proc.stdout.on("data", (d) => (stdoutData += d.toString()));
-    proc.stderr.on("data", (d) => outputChannel.append(`[Python Error]: ${d}`));
-
-    proc.on("error", (err) =>
-      reject(new Error(`Process error: ${err.message}`)),
-    );
-
-    proc.on("close", (code) => {
-      try {
-        const jsonMatch = stdoutData.match(/\{[\s\S]*\}/);
-        if (!jsonMatch) {
-          throw new Error("Invalid response from script");
-        }
-        const parsed = JSON.parse(jsonMatch[0]);
-        resolve({ valid: !!parsed.valid, frama: parsed.frama });
-      } catch {
-        resolve({ valid: /success/i.test(stdoutData) });
-      }
-    });
-  });
-}
+export function deactivate() {}

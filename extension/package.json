@@ -72,6 +72,11 @@
           "description": "(Legacy) API key. New installs store keys securely in the VS Code Secret Storage.",
           "markdownDescription": "Deprecated: Keys are now stored securely via Secret Storage. Only used as fallback."
         },
+        "doublecheckk.apiUrl": {
+          "type": "string",
+          "default": "https://double-checkk-api-285186236951.us-central1.run.app/verify",
+          "description": "The backend URL for Frama-C verification. Advanced users can point this to localhost."
+        },
         "doublecheckk.useEnvFile": {
           "type": "boolean",
           "default": true,
