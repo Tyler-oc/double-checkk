@@ -22,3 +22,7 @@ steps:
 
 images:
   - "us-central1-docker.pkg.dev/$PROJECT_ID/cloud-run-source-deploy/double-checkk-api:$COMMIT_SHA"
+
+# FIX: Tell the custom service account where to write the build logs
+options:
+  logging: CLOUD_LOGGING_ONLY
