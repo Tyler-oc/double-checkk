@@ -50,7 +50,7 @@ def call_llm(chat_log, user_api_key, api_provider: str):
             client = Anthropic(api_key=user_api_key)
             dprint(f"anthropic: sending {len(messages)} messages")
             resp = client.messages.create(
-                model="claude-3-haiku-20240307",
+                model="claude-haiku-4-5",
                 max_tokens=4000,
                 messages=messages,
             )
