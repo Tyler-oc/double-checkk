@@ -2,8 +2,7 @@ import sys
 import os
 from anthropic import Anthropic
 import openai
-
-# from google import genai
+import google.generativeai as genai
 import re
 import subprocess
 import json
@@ -40,7 +39,29 @@ def call_llm(chat_log, user_api_key, api_provider: str):
         return None
 
     try:
-        # Build alternating user/assistant structure (shared by both providers)
+        # --- GOOGLE GEMINI IMPLEMENTATION ---
+        if api_provider == "google":
+            genai.configure(api_key=user_api_key)
+            model = genai.GenerativeModel('gemini-3.1-flash-lite-preview')
+            dprint("google: sending chat completion request")
+            
+            # Gemini uses a specific history format
+            history = []
+            for i in range(0, len(chat_log) - 1, 2):
+                history.append({"role": "user", "parts": [chat_log[i]]})
+                if i + 1 < len(chat_log):
+                    history.append({"role": "model", "parts": [chat_log[i+1]]})
+            
+            # The last message in chat_log is the current prompt
+            chat = model.start_chat(history=history)
+            response = chat.send_message(chat_log[-1])
+            
+            text = response.text
+            dprint(f"google: got response_len={len(text)}")
+            return text
+
+        # --- OPENAI / ANTHROPIC IMPLEMENTATION ---
+        # Build alternating user/assistant structure shared by both providers
         messages = []
         for i, content in enumerate(chat_log):
             role = "user" if i % 2 == 0 else "assistant"
@@ -77,6 +98,7 @@ def call_llm(chat_log, user_api_key, api_provider: str):
         else:
             dprint(f"unknown provider: {api_provider}")
             return None
+            
     except Exception as e:
         dprint(f"LLM call failed: {e}")
         return None
