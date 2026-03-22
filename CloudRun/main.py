@@ -3,9 +3,11 @@ from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import Optional
-import frama_c  # Imports your existing frama_c.py script
+import frama_c
 import os
 import uvicorn
+import itertools
+from typing import List
 
 app = FastAPI(title="Double-Checkk Frama-C API")
 
@@ -28,6 +30,22 @@ class VerifyRequest(BaseModel):
     user_goal: Optional[str] = None
 
 
+def get_key_pool() -> List[str]:
+    keys_raw = os.environ.get("FALLBACK_GEMINI_KEYS", "")
+    return [key.strip() for key in keys_raw.split(",") if key.split()]
+
+
+KEY_POOL = get_key_pool()
+
+ROTATOR = itertools.cycle(KEY_POOL) if KEY_POOL else None
+
+
+def get_next_fallback_key():
+    if not ROTATOR:
+        return None
+    return next(ROTATOR)
+
+
 @app.get("/health")
 def health_check():
     return {"status": "Frama-C API is running"}
@@ -41,24 +59,15 @@ def verify_endpoint(
     user_provided_key = auth.credentials if auth else None
 
     if user_provided_key and user_provided_key.strip() != "FALLBACK":
-        # Use the key the user entered in the UI
         final_api_key = user_provided_key
         provider = req.provider
     else:
-        # 2. Key Rotation Logic
-        fallback_keys_raw = os.environ.get("FALLBACK_GEMINI_KEYS", "")
-        if not fallback_keys_raw:
+        final_api_key = get_next_fallback_key()
+        if not final_api_key:
             raise HTTPException(
-                status_code=400,
-                detail="No API key provided and no fallbacks available.",
+                status_code=400, detail="No key provided and no fallbacks configured."
             )
-
-        key_pool = fallback_keys_raw.split(",")
-        final_api_key = random.choice(
-            key_pool
-        )  # Randomly pick a key to distribute load
-        provider = "gemini"  # Force the provider to gemini for fallbacks
-
+        provider = "gemini"
     try:
         # 3. Call your logic with the chosen key
         result = frama_c.verify_c_code(

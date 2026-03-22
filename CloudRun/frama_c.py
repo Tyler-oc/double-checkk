@@ -98,7 +98,7 @@ def call_llm(chat_log, user_api_key, api_provider: str):
             import google.generativeai as genai
 
             genai.configure(api_key=user_api_key)
-            model = genai.GenerativeModel("gemini-1.5-flash")
+            model = genai.GenerativeModel("gemini-3.1-flash-lite-preview")
 
             # Gemini likes a single string or a specific list of dicts
             full_prompt = "\n".join(chat_log)
