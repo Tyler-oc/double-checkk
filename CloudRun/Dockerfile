@@ -35,6 +35,7 @@ ENV PATH="/root/.opam/4.14.1/bin:${PATH}"
 # 7. Install Frama-C and the Alt-Ergo solver
 RUN eval $(opam env) && \
     opam install -y alt-ergo frama-c && \
+    why3 config --detect && \
     opam clean -a -c -s --logs
 
 # 8. Set up your Python Cloud Run environment
