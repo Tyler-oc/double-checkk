@@ -42,20 +42,20 @@ def call_llm(chat_log, user_api_key, api_provider: str):
         # --- GOOGLE GEMINI IMPLEMENTATION ---
         if api_provider == "google":
             genai.configure(api_key=user_api_key)
-            model = genai.GenerativeModel('gemini-3.1-flash-lite-preview')
+            model = genai.GenerativeModel("gemini-3.1-flash-lite-preview")
             dprint("google: sending chat completion request")
-            
+
             # Gemini uses a specific history format
             history = []
             for i in range(0, len(chat_log) - 1, 2):
                 history.append({"role": "user", "parts": [chat_log[i]]})
                 if i + 1 < len(chat_log):
-                    history.append({"role": "model", "parts": [chat_log[i+1]]})
-            
+                    history.append({"role": "model", "parts": [chat_log[i + 1]]})
+
             # The last message in chat_log is the current prompt
             chat = model.start_chat(history=history)
             response = chat.send_message(chat_log[-1])
-            
+
             text = response.text
             dprint(f"google: got response_len={len(text)}")
             return text
@@ -94,11 +94,21 @@ def call_llm(chat_log, user_api_key, api_provider: str):
             text = resp.choices[0].message.content
             dprint(f"openai: got response_len={len(text)}")
             return text
+        elif api_provider == "gemini":
+            import google.generativeai as genai
+
+            genai.configure(api_key=user_api_key)
+            model = genai.GenerativeModel("gemini-1.5-flash")
+
+            # Gemini likes a single string or a specific list of dicts
+            full_prompt = "\n".join(chat_log)
+            resp = model.generate_content(full_prompt)
+            return resp.text
 
         else:
             dprint(f"unknown provider: {api_provider}")
             return None
-            
+
     except Exception as e:
         dprint(f"LLM call failed: {e}")
         return None

@@ -44,8 +44,7 @@ export default function App() {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          // WARNING: If your FastAPI still requires the Bearer token, you must include it here!
-          // "Authorization": "Bearer YOUR_API_KEY"
+          Authorization: "Bearer FALLBACK",
         },
         body: JSON.stringify({
           code: code,

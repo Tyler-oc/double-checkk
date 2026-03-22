@@ -35,23 +35,36 @@ def health_check():
 
 @app.post("/verify")
 def verify_endpoint(
-    req: VerifyRequest, auth: HTTPAuthorizationCredentials = Security(security)
+    req: VerifyRequest,
+    auth: Optional[HTTPAuthorizationCredentials] = Security(security),
 ):
-    if not req.code.strip():
-        raise HTTPException(status_code=400, detail="C code cannot be empty")
+    user_provided_key = auth.credentials if auth else None
 
-    # Extract the key from the auth header
-    api_key = auth.credentials
+    if user_provided_key and user_provided_key.strip() != "FALLBACK":
+        # Use the key the user entered in the UI
+        final_api_key = user_provided_key
+        provider = req.provider
+    else:
+        # 2. Key Rotation Logic
+        fallback_keys_raw = os.environ.get("FALLBACK_GEMINI_KEYS", "")
+        if not fallback_keys_raw:
+            raise HTTPException(
+                status_code=400,
+                detail="No API key provided and no fallbacks available.",
+            )
 
-    if not api_key.strip():
-        raise HTTPException(status_code=400, detail="API key is required")
+        key_pool = fallback_keys_raw.split(",")
+        final_api_key = random.choice(
+            key_pool
+        )  # Randomly pick a key to distribute load
+        provider = "gemini"  # Force the provider to gemini for fallbacks
 
     try:
-        # Pass everything into your existing Frama-C logic
+        # 3. Call your logic with the chosen key
         result = frama_c.verify_c_code(
             user_code=req.code,
-            user_api_key=api_key,
-            api_provider=req.provider,
+            user_api_key=final_api_key,
+            api_provider=provider,
             user_goal=req.user_goal,
         )
         return result
