@@ -1,5 +1,6 @@
 from fastapi import FastAPI, HTTPException, Security
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import Optional
 import frama_c  # Imports your existing frama_c.py script
@@ -7,6 +8,14 @@ import os
 import uvicorn
 
 app = FastAPI(title="Double-Checkk Frama-C API")
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],  # This MUST include "OPTIONS" (which "*" does)
+    allow_headers=["*"],
+)
 
 # This tells FastAPI to look for an "Authorization: Bearer <token>" header
 security = HTTPBearer()
