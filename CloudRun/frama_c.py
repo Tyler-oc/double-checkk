@@ -40,28 +40,16 @@ def call_llm(chat_log, user_api_key, api_provider: str):
 
     try:
         # --- GOOGLE GEMINI IMPLEMENTATION ---
-        if api_provider == "google":
+        if api_provider == "google" or api_provider == "gemini":
             genai.configure(api_key=user_api_key)
-            model = genai.GenerativeModel("gemini-3.1-flash-lite-preview")
+            model = genai.GenerativeModel("gemini-1.5-flash")
             dprint("google: sending chat completion request")
 
-            # Gemini uses a specific history format
-            history = []
-            for i in range(0, len(chat_log) - 1, 2):
-                history.append({"role": "user", "parts": [chat_log[i]]})
-                if i + 1 < len(chat_log):
-                    history.append({"role": "model", "parts": [chat_log[i + 1]]})
-
-            # The last message in chat_log is the current prompt
-            chat = model.start_chat(history=history)
-            response = chat.send_message(chat_log[-1])
-
-            text = response.text
-            dprint(f"google: got response_len={len(text)}")
-            return text
+            full_prompt = "\n".join(chat_log)
+            resp = model.generate_content(full_prompt)
+            return resp.text
 
         # --- OPENAI / ANTHROPIC IMPLEMENTATION ---
-        # Build alternating user/assistant structure shared by both providers
         messages = []
         for i, content in enumerate(chat_log):
             role = "user" if i % 2 == 0 else "assistant"
@@ -71,7 +59,7 @@ def call_llm(chat_log, user_api_key, api_provider: str):
             client = Anthropic(api_key=user_api_key)
             dprint(f"anthropic: sending {len(messages)} messages")
             resp = client.messages.create(
-                model="claude-haiku-4-5",
+                model="claude-3-5-haiku-latest",
                 max_tokens=4000,
                 messages=messages,
             )
@@ -80,30 +68,19 @@ def call_llm(chat_log, user_api_key, api_provider: str):
             return text
 
         elif api_provider == "openai":
-            # Use the modern OpenAI v1 client
             from openai import OpenAI
 
             client = OpenAI(api_key=user_api_key)
             dprint("openai: sending chat completion request")
 
             resp = client.chat.completions.create(
-                model="gpt-4o",  # Use a valid modern model
+                model="gpt-4o",
                 messages=messages,
                 max_tokens=4000,
             )
             text = resp.choices[0].message.content
             dprint(f"openai: got response_len={len(text)}")
             return text
-        elif api_provider == "gemini":
-            import google.generativeai as genai
-
-            genai.configure(api_key=user_api_key)
-            model = genai.GenerativeModel("gemini-3.1-flash-lite-preview")
-
-            # Gemini likes a single string or a specific list of dicts
-            full_prompt = "\n".join(chat_log)
-            resp = model.generate_content(full_prompt)
-            return resp.text
 
         else:
             dprint(f"unknown provider: {api_provider}")
@@ -144,6 +121,43 @@ def run_frama_c(c_path: str, extra_args=None, timeout_sec=60):
         return False, str(e)
 
 
+# NEW: The Evaluation / Translation Pass
+def explain_results(
+    annotated_code: str,
+    frama_output: str,
+    is_success: bool,
+    user_api_key: str,
+    api_provider: str,
+) -> str:
+    dprint("Starting translation pass to explain results...")
+    status_text = "SUCCEEDED" if is_success else "FAILED"
+
+    code_str = annotated_code if annotated_code else "No code generated."
+    out_str = frama_output if frama_output else "No output."
+
+    prompt = f"""You are a helpful C programming tutor and formal verification expert.
+Your system just attempted to mathematically prove a C function using Frama-C and ACSL.
+The verification {status_text}.
+
+Here is the annotated C code:
+{code_str}
+
+Here is the Frama-C output log:
+{out_str}
+
+Please explain to the user in 2 to 4 simple sentences what this result means.
+If it succeeded, briefly explain what mathematical property was proved.
+If it failed, translate the Frama-C error into plain English so the user understands what went wrong or what couldn't be proved. Do not use complex jargon.
+Output ONLY the plain-English explanation text. Do not include markdown formatting or pleasantries."""
+
+    explanation = call_llm([prompt], user_api_key, api_provider)
+    return (
+        explanation
+        if explanation
+        else "Could not generate an AI explanation at this time."
+    )
+
+
 def verify_c_code(
     user_code: str, user_api_key: str, api_provider: str, user_goal: str = None
 ):
@@ -151,46 +165,29 @@ def verify_c_code(
         f"verify_c_code: code_len={len(user_code) if user_code else 0}, provider={api_provider}, goal={user_goal}"
     )
     if not user_code:
-        return {"valid": False, "error": "empty code"}
+        return {
+            "valid": False,
+            "error": "empty code",
+            "explanation": "No code was provided.",
+        }
 
-    # FIX: Initialize fallback values to prevent crashes if the LLM fails completely
     extracted_code = None
     frama_output = (
         "Execution failed before Frama-C could run (likely an LLM API error)."
     )
-
     goal_instruction = ""
 
+    # Re-formatted prompt so it behaves nicely with Python strings and Markdown
     prompt = (
-        """
-Example 1 ACSL Professional Coding Agent Output: [[[/*@ requires length > 0; requires \valid_read(arr + (0..length-1)); assigns \nothing; ensures \exists integer k; 0 <= k < length && \result == arr[k]; ensures \forall integer i; 0 <= i < length ==> \result >= arr[i]; */ int find_max(int arr[], int length) { int max = arr[0]; /*@ loop invariant 0 <= i <= length; loop invariant \forall integer j; 0 <= j < i ==> max >= arr[j]; loop invariant \exists integer k; 0 <= k < length && max == arr[k]; loop assigns i, max; loop variant length - i; */ for(int i = 1; i < length; i++) { if (arr[i] > max) { max = arr[i]; } } return max; } /*@ assigns \nothing; */ int main() { int arr[] = {1, 2, 4, 2, 8, 3}; int length = 6; int result = find_max(arr, length); return 0; } ]]]
-
-Example 2 ACSL Professional Coding Agent Output: [[[/*@ logic integer factorial(integer n) = (n <= 0) ? 1 : n * factorial(n - 1); */ /*@ requires n >= 0; requires n <= 12; assigns \nothing; ensures \result == factorial(n); */ int compute_factorial(int n) { int i, f; f = 1; /*@ loop invariant 1 <= i <= n + 1; loop invariant f == factorial(i - 1); loop invariant f >= 1; loop invariant 1 <= i <= 13; loop invariant i == 1 ==> f == 1; loop invariant i == 2 ==> f == 1; loop invariant i == 3 ==> f == 2; loop invariant i == 4 ==> f == 6; loop invariant i == 5 ==> f == 24; loop invariant i == 6 ==> f == 120; loop invariant i == 7 ==> f == 720; loop invariant i == 8 ==> f == 5040; loop invariant i == 9 ==> f == 40320; loop invariant i == 10 ==> f == 362880; loop invariant i == 11 ==> f == 3628800; loop invariant i == 12 ==> f == 39916800; loop invariant i == 13 ==> f == 479001600; loop assigns i, f; loop variant n - i + 1; */ for (i = 1; i <= n; i++) f = f * i; return f; } /*@ assigns \nothing; */ int main() { int n = 5, i, f; f = 1; /*@ loop invariant 1 <= i <= n + 1; loop invariant f == factorial(i - 1); loop invariant f >= 1; loop invariant i == 1 ==> f == 1; loop invariant i == 2 ==> f == 1; loop invariant i == 3 ==> f == 2; loop invariant i == 4 ==> f == 6; loop invariant i == 5 ==> f == 24; loop invariant i == 6 ==> f == 120; loop assigns i, f; loop variant n - i + 1; */ for (i = 1; i <= n; i++) f = f * i; return f; } ]]]
-
-Example 3 ACSL Professional Coding Agent Output: [[[ /*@ logic integer factorial(integer n) = (n <= 0) ? 1 : n * factorial(n - 1); */ /*@ assigns \nothing; ensures \result == factorial(5); */ int main() { int s, r, n = 5, u, v; /* keep an explicit runtime/verification check for n bounds */ /*@ assert 0 <= n <= 12; */ /* Outer loop: - r runs from 1 up to n-1, - u == factorial(r) at loop head */ /*@ loop invariant 1 <= r <= n; loop invariant u == factorial(r); loop assigns r, s, u, v; loop variant n - r; */ for (u = r = 1; r < n; r++) { v = u; /* Inner loop rewritten as a simple counting loop: u += v executed r times */ /*@ loop invariant 0 <= s <= r; loop invariant u == v * (s + 1); loop assigns s, u; loop variant r - s; */ for (s = 0; s < r; ++s) { u += v; } /* now u == v * (r + 1) == factorial(r+1) */ /*@ assert u == factorial(r + 1); */ } return u; } ]]] 
-
-Example 4 ACSL Professional Coding Agent Output: [[[UNVERIFIABLE: recursive calls were made unguarded. Passing j - m + 1 or n - i + 1 could become 0 or negative.]]]
-
-You are an expert in Frama-C/ACSL. Please verify my code (attached below)
- using ACSL specifications. Refer to the above examples as a guide. 
- You may think before outputting your code but when you are done, 
- output the full code enclosed by 3 brackets (it will be extracted 
- and the proof will be automatically run). If the code is unverifiable 
- (ie. because the function has an error or hole) simply write unverifiable
-  followed by a small explanation within the brackets. I am sending you the
-   code to be verified, it is most important that you do not modify any part
-    of the code. If the code is unverifiable (ie. bad code/ bad specification) simply say '!!i give up!!'. 
-    You must only write ACSL on top of the already implemented code, 
-    and wrap the code in any function / include statements necessary to create a valid c program.
-It is vital that the generated code compiles to a valid C program.
-"""
+        "Example 1 ACSL Professional Coding Agent Output: [[[/*@ requires length > 0; requires \\valid_read(arr + (0..length-1)); assigns \\nothing; ensures \\exists integer k; 0 <= k < length && \\result == arr[k]; ensures \\forall integer i; 0 <= i < length ==> \\result >= arr[i]; */ int find_max(int arr[], int length) { int max = arr[0]; /*@ loop invariant 0 <= i <= length; loop invariant \\forall integer j; 0 <= j < i ==> max >= arr[j]; loop invariant \\exists integer k; 0 <= k < length && max == arr[k]; loop assigns i, max; loop variant length - i; */ for(int i = 1; i < length; i++) { if (arr[i] > max) { max = arr[i]; } } return max; } /*@ assigns \\nothing; */ int main() { int arr[] = {1, 2, 4, 2, 8, 3}; int length = 6; int result = find_max(arr, length); return 0; } ]]]\n\n"
+        "Example 2 ACSL Professional Coding Agent Output: [[[/*@ logic integer factorial(integer n) = (n <= 0) ? 1 : n * factorial(n - 1); */ /*@ requires n >= 0; requires n <= 12; assigns \\nothing; ensures \\result == factorial(n); */ int compute_factorial(int n) { int i, f; f = 1; /*@ loop invariant 1 <= i <= n + 1; loop invariant f == factorial(i - 1); loop invariant f >= 1; loop invariant 1 <= i <= 13; loop invariant i == 1 ==> f == 1; loop invariant i == 2 ==> f == 1; loop invariant i == 3 ==> f == 2; loop invariant i == 4 ==> f == 6; loop invariant i == 5 ==> f == 24; loop invariant i == 6 ==> f == 120; loop invariant i == 7 ==> f == 720; loop invariant i == 8 ==> f == 5040; loop invariant i == 9 ==> f == 40320; loop invariant i == 10 ==> f == 362880; loop invariant i == 11 ==> f == 3628800; loop invariant i == 12 ==> f == 39916800; loop invariant i == 13 ==> f == 479001600; loop assigns i, f; loop variant n - i + 1; */ for (i = 1; i <= n; i++) f = f * i; return f; } /*@ assigns \\nothing; */ int main() { int n = 5, i, f; f = 1; /*@ loop invariant 1 <= i <= n + 1; loop invariant f == factorial(i - 1); loop invariant f >= 1; loop invariant i == 1 ==> f == 1; loop invariant i == 2 ==> f == 1; loop invariant i == 3 ==> f == 2; loop invariant i == 4 ==> f == 6; loop invariant i == 5 ==> f == 24; loop invariant i == 6 ==> f == 120; loop assigns i, f; loop variant n - i + 1; */ for (i = 1; i <= n; i++) f = f * i; return f; } ]]]\n\n"
+        "Example 3 ACSL Professional Coding Agent Output: [[[ /*@ logic integer factorial(integer n) = (n <= 0) ? 1 : n * factorial(n - 1); */ /*@ assigns \\nothing; ensures \\result == factorial(5); */ int main() { int s, r, n = 5, u, v; /* keep an explicit runtime/verification check for n bounds */ /*@ assert 0 <= n <= 12; */ /* Outer loop: - r runs from 1 up to n-1, - u == factorial(r) at loop head */ /*@ loop invariant 1 <= r <= n; loop invariant u == factorial(r); loop assigns r, s, u, v; loop variant n - r; */ for (u = r = 1; r < n; r++) { v = u; /* Inner loop rewritten as a simple counting loop: u += v executed r times */ /*@ loop invariant 0 <= s <= r; loop invariant u == v * (s + 1); loop assigns s, u; loop variant r - s; */ for (s = 0; s < r; ++s) { u += v; } /* now u == v * (r + 1) == factorial(r+1) */ /*@ assert u == factorial(r + 1); */ } return u; } ]]]\n\n"
+        "Example 4 ACSL Professional Coding Agent Output: [[[UNVERIFIABLE: recursive calls were made unguarded. Passing j - m + 1 or n - i + 1 could become 0 or negative.]]]\n\n"
+        "You are an expert in Frama-C/ACSL. Please verify my code (attached below) using ACSL specifications. Refer to the above examples as a guide. You may think before outputting your code but when you are done, output the full code enclosed by 3 brackets (it will be extracted and the proof will be automatically run). If the code is unverifiable (ie. because the function has an error or hole) simply write unverifiable followed by a small explanation within the brackets. I am sending you the code to be verified, it is most important that you do not modify any part of the code. If the code is unverifiable (ie. bad code/ bad specification) simply say '!!i give up!!'. You must only write ACSL on top of the already implemented code, and wrap the code in any function / include statements necessary to create a valid c program. It is vital that the generated code compiles to a valid C program.\n"
         + goal_instruction
-        + """
-     Now, here is the code to be verified: [[[
-"""
+        + "\nNow, here is the code to be verified: [[[\n"
         + user_code
-        + """]]]
-"""
+        + "\n]]]\n"
     )
 
     chat_log = [prompt]
@@ -213,7 +210,14 @@ It is vital that the generated code compiles to a valid C program.
 
         if "!!i give up!!" in extracted_code.lower():
             dprint("trial: LLM marked code as unverifiable")
-            return {"valid": False, "frama": "trial: LLM marked code as unverifiable"}
+            explanation = explain_results(
+                extracted_code,
+                "LLM determined the code was unverifiable.",
+                False,
+                user_api_key,
+                api_provider,
+            )
+            return {"valid": False, "frama": extracted_code, "explanation": explanation}
 
         # Write to a temp file and run Frama-C
         with tempfile.NamedTemporaryFile(mode="w", suffix=".c", delete=False) as tmp:
@@ -230,7 +234,10 @@ It is vital that the generated code compiles to a valid C program.
 
         if ok:
             dprint("verification succeeded")
-            return {"valid": True, "frama": extracted_code}
+            explanation = explain_results(
+                extracted_code, frama_output, True, user_api_key, api_provider
+            )
+            return {"valid": True, "frama": extracted_code, "explanation": explanation}
         else:
             dprint("verification failed; continuing to next trial")
             chat_log.append(
@@ -246,10 +253,12 @@ It is vital that the generated code compiles to a valid C program.
     )
     final_frama_text += f"\n\n// The issue was:\n// {frama_output}"
 
-    return {
-        "valid": False,
-        "frama": final_frama_text,
-    }
+    # CALL EXPLAINER ON FAILURE AFTER MAX RETRIES
+    explanation = explain_results(
+        extracted_code, frama_output, False, user_api_key, api_provider
+    )
+
+    return {"valid": False, "frama": final_frama_text, "explanation": explanation}
 
 
 def main():

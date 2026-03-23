@@ -24,8 +24,9 @@ type VerifyResult = {
   valid: boolean;
   frama?: string;
   error?: string;
-  status?: string; // keeping your old status just in case
-  output?: string; // keeping your old output just in case
+  status?: string;
+  output?: string;
+  explanation?: string; // NEW: The AI translation of the Frama-C logs
 };
 
 export default function App() {
@@ -48,7 +49,7 @@ export default function App() {
         },
         body: JSON.stringify({
           code: code,
-          provider: "openai", // Hardcoded for the web demo, or you can add a dropdown later!
+          provider: "openai",
           user_goal: userGoal.trim() !== "" ? userGoal : null,
         }),
       });
@@ -68,203 +69,188 @@ export default function App() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-950 text-gray-100 font-sans">
-      {/* Header */}
-      <header className="border-b border-gray-800 px-6 py-5">
-        <div className="max-w-7xl mx-auto flex items-center gap-4">
-          <div className="flex items-center gap-2">
-            <span className="text-green-400 text-2xl font-bold font-mono">
-              &#10003;
-            </span>
-            <h1 className="text-xl font-bold tracking-tight text-white">
-              Double Check
-            </h1>
-          </div>
-          <span className="text-gray-500 text-sm">|</span>
-          <p className="text-gray-400 text-sm hidden sm:block">
-            Formally verifies C code using AI and Frama-C
-          </p>
+    <div className="min-h-screen bg-[#0d1117] text-zinc-300 font-sans selection:bg-blue-500/30">
+      {/* Navbar - IDE Style */}
+      <header className="border-b border-zinc-800 bg-[#010409] px-6 py-3 flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <div className="w-4 h-4 bg-blue-500 rounded-sm"></div>
+          <h1 className="text-lg font-semibold tracking-wide text-zinc-100 font-mono">
+            Double_Check
+          </h1>
+          <span className="text-zinc-600 px-2">|</span>
+          <span className="text-xs font-mono text-zinc-400 hidden sm:block">
+            v1.0.0-beta [Formal Verification Engine]
+          </span>
         </div>
       </header>
 
-      {/* Hero */}
-      <section className="max-w-7xl mx-auto px-6 pt-12 pb-8 text-center">
-        <div className="inline-flex items-center gap-2 bg-green-900/30 border border-green-700/50 rounded-full px-4 py-1.5 text-green-400 text-xs font-medium mb-6">
-          <span className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse" />
-          Powered by Frama-C + AI
+      {/* Main Workspace */}
+      <main className="max-w-[1600px] mx-auto p-4 md:p-6 lg:p-8">
+        {/* CLI-style Intro */}
+        <div className="mb-6 font-mono text-sm text-zinc-400">
+          <p className="text-zinc-300 mb-1">$ ./double-check --help</p>
+          <p className="pl-4 border-l-2 border-zinc-800">
+            Automated Frama-C WP prover. Write C code, declare intent, and
+            verify mathematically.
+          </p>
         </div>
-        <h2 className="text-4xl md:text-5xl font-bold text-white mb-4 tracking-tight">
-          Prove your C code is correct.
-        </h2>
-        <p className="text-gray-400 text-lg max-w-2xl mx-auto">
-          Paste any C function, describe what it should do, and let Double Check
-          formally verify it using Frama-C&apos;s WP plugin — no manual proof
-          required.
-        </p>
-      </section>
 
-      {/* Two-column editor + output */}
-      <main className="max-w-7xl mx-auto px-6 pb-16">
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          {/* Left: Editor & Controls */}
+        {/* IDE Split View */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 lg:gap-6">
+          {/* LEFT PANEL: Editor & Config */}
           <div className="flex flex-col gap-4">
-            <div className="rounded-xl overflow-hidden border border-gray-800 shadow-2xl">
-              <div className="flex items-center gap-2 bg-gray-900 px-4 py-2.5 border-b border-gray-800">
-                <span className="w-3 h-3 rounded-full bg-red-500/80" />
-                <span className="w-3 h-3 rounded-full bg-yellow-500/80" />
-                <span className="w-3 h-3 rounded-full bg-green-500/80" />
-                <span className="ml-2 text-gray-500 text-xs font-mono">
+            {/* Editor Window */}
+            <div className="rounded border border-zinc-800 bg-[#0d1117] overflow-hidden shadow-lg flex flex-col">
+              {/* File Tab */}
+              <div className="flex text-xs font-mono text-zinc-500 bg-[#010409] border-b border-zinc-800">
+                <div className="px-4 py-2 bg-[#0d1117] border-r border-zinc-800 text-zinc-200 border-t-2 border-t-blue-500">
                   main.c
-                </span>
+                </div>
               </div>
               <Editor
-                height="400px"
+                height="450px"
                 defaultLanguage="c"
                 theme="vs-dark"
                 value={code}
                 onChange={(val) => setCode(val ?? "")}
                 options={{
                   fontSize: 13,
+                  fontFamily: "'JetBrains Mono', 'Fira Code', monospace",
                   minimap: { enabled: false },
                   scrollBeyondLastLine: false,
                   lineNumbers: "on",
                   tabSize: 2,
-                  wordWrap: "on",
-                  padding: { top: 12, bottom: 12 },
+                  padding: { top: 16, bottom: 16 },
                 }}
               />
             </div>
 
-            {/* NEW: User Goal Input */}
-            <div className="flex flex-col gap-1.5">
-              <label
-                htmlFor="userGoal"
-                className="text-sm font-medium text-gray-400 ml-1"
-              >
-                What should this code do?{" "}
-                <span className="text-gray-600">(Optional)</span>
-              </label>
-              <input
-                id="userGoal"
-                type="text"
-                value={userGoal}
-                onChange={(e) => setUserGoal(e.target.value)}
-                placeholder="e.g. Ensure the result is strictly positive"
-                className="w-full bg-gray-900 border border-gray-800 rounded-xl px-4 py-3 text-sm text-gray-200 placeholder-gray-600 focus:outline-none focus:ring-1 focus:ring-green-500/50 transition-all shadow-inner"
-              />
-            </div>
+            {/* Config & Execution Panel */}
+            <div className="rounded border border-zinc-800 bg-[#010409] p-4 flex flex-col gap-4 shadow-lg">
+              <div className="flex flex-col gap-2">
+                <label
+                  htmlFor="userGoal"
+                  className="text-xs font-mono text-zinc-400 uppercase tracking-wider"
+                >
+                  Verification Goal (Optional)
+                </label>
+                <input
+                  id="userGoal"
+                  type="text"
+                  value={userGoal}
+                  onChange={(e) => setUserGoal(e.target.value)}
+                  placeholder="e.g. Ensure the result is strictly positive"
+                  className="w-full bg-[#0d1117] border border-zinc-800 rounded px-3 py-2 text-sm font-mono text-zinc-200 placeholder-zinc-700 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-colors"
+                />
+              </div>
 
-            <button
-              onClick={handleVerify}
-              disabled={loading}
-              className="w-full bg-green-600 hover:bg-green-500 disabled:bg-gray-700 disabled:text-gray-500 text-white font-bold py-3.5 px-6 rounded-xl transition-colors duration-150 flex items-center justify-center gap-2 text-sm tracking-wide mt-1"
-            >
-              {loading ? (
-                <>
-                  <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                  Verifying...
-                </>
-              ) : (
-                <>
-                  <span>&#10003;</span>
-                  Formally Verify Code
-                </>
-              )}
-            </button>
+              <button
+                onClick={handleVerify}
+                disabled={loading}
+                className="w-full bg-blue-600 hover:bg-blue-500 disabled:bg-zinc-800 disabled:text-zinc-500 text-white font-mono text-sm py-2.5 px-4 rounded transition-colors flex items-center justify-center gap-2 uppercase tracking-wide"
+              >
+                {loading ? (
+                  <>
+                    <span className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                    Running Prover...
+                  </>
+                ) : (
+                  <>
+                    <span>►</span> Execute Verification
+                  </>
+                )}
+              </button>
+            </div>
           </div>
 
-          {/* Right: Output terminal */}
-          <div className="flex flex-col">
-            <div className="rounded-xl overflow-hidden border border-gray-800 shadow-2xl flex-1 flex flex-col h-full min-h-[500px]">
-              <div className="flex items-center gap-2 bg-gray-900 px-4 py-2.5 border-b border-gray-800">
-                <span className="w-3 h-3 rounded-full bg-red-500/80" />
-                <span className="w-3 h-3 rounded-full bg-yellow-500/80" />
-                <span className="w-3 h-3 rounded-full bg-green-500/80" />
-                <span className="ml-2 text-gray-500 text-xs font-mono">
-                  frama-c output
-                </span>
+          {/* RIGHT PANEL: Output Console */}
+          <div className="flex flex-col h-full min-h-[500px]">
+            <div className="rounded border border-zinc-800 bg-black flex-1 flex flex-col shadow-lg overflow-hidden">
+              {/* Output Tab Bar */}
+              <div className="flex items-center justify-between text-xs font-mono text-zinc-500 bg-[#010409] border-b border-zinc-800 pr-4">
+                <div className="px-4 py-2 bg-black border-r border-zinc-800 text-zinc-200">
+                  TERMINAL
+                </div>
                 {result && (
                   <span
-                    className={`ml-auto text-xs font-medium px-2 py-0.5 rounded-full ${
+                    className={`px-2 py-0.5 rounded-sm uppercase tracking-wider text-[10px] font-bold ${
                       result.valid || result.status === "success"
-                        ? "bg-green-900/60 text-green-400"
-                        : "bg-red-900/60 text-red-400"
+                        ? "bg-green-500/10 text-green-400 border border-green-500/20"
+                        : "bg-red-500/10 text-red-400 border border-red-500/20"
                     }`}
                   >
                     {result.valid || result.status === "success"
-                      ? "verified"
-                      : "failed"}
+                      ? "PASS"
+                      : "FAIL"}
                   </span>
                 )}
               </div>
 
-              <div className="bg-gray-950 flex-1 p-4 font-mono text-sm overflow-auto">
+              {/* Scrollable Output Area */}
+              <div className="p-4 overflow-auto flex-1 font-mono text-[13px] leading-relaxed">
+                {/* Idle State */}
                 {!result && !error && !loading && (
-                  <div className="flex flex-col items-center justify-center h-full gap-3 text-gray-600 mt-20">
-                    <svg
-                      className="w-10 h-10"
-                      fill="none"
-                      stroke="currentColor"
-                      viewBox="0 0 24 24"
-                    >
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth={1.5}
-                        d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"
-                      />
-                    </svg>
-                    <p className="text-sm">
-                      Click &quot;Formally Verify Code&quot; to run Frama-C
-                    </p>
+                  <div className="text-zinc-600 h-full flex flex-col items-center justify-center mt-20">
+                    <p className="mb-2">&gt; Engine ready.</p>
+                    <p>&gt; Waiting for input...</p>
                   </div>
                 )}
 
+                {/* Loading State */}
                 {loading && (
-                  <div className="flex flex-col items-center justify-center h-full gap-3 text-gray-500 mt-20">
-                    <span className="w-8 h-8 border-2 border-gray-600 border-t-green-400 rounded-full animate-spin" />
-                    <p className="text-sm">Running Frama-C WP analysis...</p>
+                  <div className="text-blue-400 flex items-center gap-3 mt-4">
+                    <span className="w-2 h-4 bg-blue-400 animate-pulse" />
+                    <span>Analyzing AST and generating ACSL invariants...</span>
                   </div>
                 )}
 
+                {/* Error State */}
                 {error && (
-                  <div className="text-red-400 mt-4">
-                    <span className="text-red-600 font-bold">Error: </span>
+                  <div className="text-red-400 mt-4 border-l-2 border-red-500 pl-3">
+                    <span className="font-bold">FATAL: </span>
                     {error}
                   </div>
                 )}
 
+                {/* Success/Result State */}
                 {result && (
-                  <div className="space-y-2">
-                    <div
-                      className={
-                        result.valid || result.status === "success"
-                          ? "text-green-400"
-                          : "text-red-400"
-                      }
-                    >
-                      <span className="text-gray-500">$ </span>
-                      frama-c -wp main.c
+                  <div className="space-y-6">
+                    {/* NEW: AI Explanation Box */}
+                    {result.explanation && (
+                      <div className="border-l-2 border-blue-500 bg-blue-950/20 p-4 rounded-r-md">
+                        <div className="text-blue-400 font-bold text-xs uppercase tracking-wider mb-2 flex items-center gap-2">
+                          <span className="w-1.5 h-1.5 rounded-full bg-blue-400 animate-pulse" />
+                          AI Diagnostic Summary
+                        </div>
+                        <p className="text-blue-100 font-sans text-sm leading-relaxed">
+                          {result.explanation}
+                        </p>
+                      </div>
+                    )}
+
+                    {/* Raw Frama-C Log */}
+                    <div>
+                      <div className="text-zinc-500 mb-2">
+                        $ frama-c -wp main.c
+                      </div>
+                      <pre className="text-zinc-300 whitespace-pre-wrap">
+                        {result.frama ??
+                          result.output ??
+                          result.error ??
+                          JSON.stringify(result, null, 2)}
+                      </pre>
                     </div>
 
-                    {/* Display the newly generated Frama-C code/output */}
-                    <pre className="text-gray-300 whitespace-pre-wrap leading-relaxed mt-2">
-                      {result.frama ??
-                        result.output ??
-                        result.error ??
-                        JSON.stringify(result, null, 2)}
-                    </pre>
-
+                    {/* Final Status Line */}
                     <div
-                      className={`mt-4 font-bold ${
+                      className={`pt-4 border-t border-zinc-800 ${
                         result.valid || result.status === "success"
                           ? "text-green-400"
                           : "text-red-400"
                       }`}
                     >
-                      {result.valid || result.status === "success"
-                        ? "All goals proved."
-                        : "Verification failed."}
+                      &gt; Process exited with code{" "}
+                      {result.valid || result.status === "success" ? "0" : "1"}.
                     </div>
                   </div>
                 )}
