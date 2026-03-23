@@ -126,14 +126,42 @@ export async function activate(context: vscode.ExtensionContext) {
                 userGoal || null,
               );
 
-              const action = await vscode.window.showInformationMessage(
-                result.valid
-                  ? "Code successfully validated"
-                  : "Could not validate code.",
-                "Show details",
+              // 1. Log everything to the Output Channel for deep inspection
+              outputChannel.clear();
+              outputChannel.appendLine(
+                "=== Double-Checkk Verification Log ===",
               );
+              if (result.explanation) {
+                outputChannel.appendLine(
+                  `\n[AI DIAGNOSTIC]\n${result.explanation}\n`,
+                );
+              }
+              outputChannel.appendLine("[FRAMA-C OUTPUT]");
+              outputChannel.appendLine(result.frama || "No output generated.");
 
-              if (action === "Show details" && result.frama) {
+              // Pop open the output panel slightly so they know it's there
+              outputChannel.show(true);
+
+              // 2. Display the AI Explanation in a native VS Code Popup
+              const msgText =
+                result.explanation ||
+                (result.valid ? "Code validated." : "Validation failed.");
+              let action: string | undefined;
+
+              if (result.valid) {
+                action = await vscode.window.showInformationMessage(
+                  `✅ Double-Checkk: ${msgText}`,
+                  "Review Code",
+                );
+              } else {
+                action = await vscode.window.showErrorMessage(
+                  `❌ Double-Checkk: ${msgText}`,
+                  "Review Code",
+                );
+              }
+
+              // 3. Keep the existing flow to open the virtual document
+              if (action === "Review Code" && result.frama) {
                 const doc = await vscode.workspace.openTextDocument({
                   content: result.frama,
                   language: "c",
@@ -141,7 +169,7 @@ export async function activate(context: vscode.ExtensionContext) {
                 await vscode.window.showTextDocument(doc, { preview: true });
 
                 const replace = await vscode.window.showInformationMessage(
-                  "Apply annotations?",
+                  "Apply annotations to your original file?",
                   "Replace selection",
                   "Skip",
                 );
@@ -173,7 +201,7 @@ export async function activate(context: vscode.ExtensionContext) {
             return;
           }
           const action = new vscode.CodeAction(
-            "Verify selection",
+            "Verify selection (Double-Checkk)",
             vscode.CodeActionKind.QuickFix,
           );
           action.command = {

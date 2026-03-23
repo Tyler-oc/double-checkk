@@ -1,7 +1,7 @@
 import sys
 import os
 from anthropic import Anthropic
-import openai
+from openai import OpenAI
 import google.generativeai as genai
 import re
 import subprocess
@@ -42,14 +42,12 @@ def call_llm(chat_log, user_api_key, api_provider: str):
         # --- GOOGLE GEMINI IMPLEMENTATION ---
         if api_provider == "google" or api_provider == "gemini":
             genai.configure(api_key=user_api_key)
-            model = genai.GenerativeModel("gemini-1.5-flash")
+            model = genai.GenerativeModel("gemini-3.1-flash-lite-preview")
             dprint("google: sending chat completion request")
 
             full_prompt = "\n".join(chat_log)
             resp = model.generate_content(full_prompt)
             return resp.text
-
-        # --- OPENAI / ANTHROPIC IMPLEMENTATION ---
         messages = []
         for i, content in enumerate(chat_log):
             role = "user" if i % 2 == 0 else "assistant"
@@ -68,7 +66,6 @@ def call_llm(chat_log, user_api_key, api_provider: str):
             return text
 
         elif api_provider == "openai":
-            from openai import OpenAI
 
             client = OpenAI(api_key=user_api_key)
             dprint("openai: sending chat completion request")

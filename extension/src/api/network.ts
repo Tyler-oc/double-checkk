@@ -6,7 +6,7 @@ export async function verifyCodeOnCloud(
   provider: ProviderId,
   apiKey: string,
   userGoal: string | null,
-): Promise<{ valid: boolean; frama?: string }> {
+): Promise<{ valid: boolean; frama?: string; explanation?: string }> {
   const response = await fetch(apiUrl, {
     method: "POST",
     headers: {
@@ -25,5 +25,9 @@ export async function verifyCodeOnCloud(
     throw new Error(`Server returned ${response.status}: ${errorText}`);
   }
 
-  return (await response.json()) as { valid: boolean; frama?: string };
+  return (await response.json()) as {
+    valid: boolean;
+    frama?: string;
+    explanation?: string;
+  };
 }
