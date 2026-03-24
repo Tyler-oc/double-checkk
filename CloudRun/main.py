@@ -19,11 +19,9 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# This tells FastAPI to look for an "Authorization: Bearer <token>" header
 security = HTTPBearer()
 
 
-# We removed api_key from the JSON body model
 class VerifyRequest(BaseModel):
     code: str
     provider: str
