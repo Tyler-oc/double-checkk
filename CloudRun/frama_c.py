@@ -118,7 +118,6 @@ def run_frama_c(c_path: str, extra_args=None, timeout_sec=60):
         return False, str(e)
 
 
-# NEW: The Evaluation / Translation Pass
 def explain_results(
     annotated_code: str,
     frama_output: str,
@@ -144,15 +143,22 @@ Here is the Frama-C output log:
 
 Please explain to the user in 2 to 4 simple sentences what this result means.
 If it succeeded, briefly explain what mathematical property was proved.
-If it failed, translate the Frama-C error into plain English so the user understands what went wrong or what couldn't be proved. Do not use complex jargon.
-Output ONLY the plain-English explanation text. Do not include markdown formatting or pleasantries."""
+If it failed, translate the Frama-C error into plain English.
+Output ONLY the plain-English explanation text."""
 
-    explanation = call_llm([prompt], user_api_key, api_provider)
-    return (
-        explanation
-        if explanation
-        else "Could not generate an AI explanation at this time."
-    )
+    # Retry loop: 3 attempts for the explanation
+    for attempt in range(3):
+        explanation = call_llm([prompt], user_api_key, api_provider)
+        if explanation:
+            return explanation
+        dprint(f"Explanation attempt {attempt + 1} failed. Retrying in 1s...")
+        time.sleep(1)
+
+    # Static Fallback if the AI is completely unresponsive
+    if is_success:
+        return "The mathematical proof was successful! Frama-C has verified that your code satisfies all ACSL contracts and is free of runtime errors like overflows or invalid memory access."
+    else:
+        return "The proof failed. Please check the raw Frama-C logs below for details on which specific annotation or safety check could not be verified."
 
 
 def verify_c_code(
