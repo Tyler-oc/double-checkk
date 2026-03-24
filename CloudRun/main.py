@@ -6,7 +6,7 @@ from typing import Optional
 import frama_c
 import os
 import uvicorn
-import itertools
+import threading
 from typing import List
 
 app = FastAPI(title="Double-Checkk Frama-C API")
@@ -30,18 +30,24 @@ class VerifyRequest(BaseModel):
 
 def get_key_pool() -> List[str]:
     keys_raw = os.environ.get("FALLBACK_GEMINI_KEYS", "")
-    return [key.strip() for key in keys_raw.split(",") if key.split()]
+    return [key.strip() for key in keys_raw.split(",") if key.strip()]
 
 
 KEY_POOL = get_key_pool()
 
-ROTATOR = itertools.cycle(KEY_POOL) if KEY_POOL else None
+_key_index = 0
+_key_lock = threading.Lock()
 
 
-def get_next_fallback_key():
-    if not ROTATOR:
-        return None
-    return next(ROTATOR)
+def get_fallback_keys_in_order() -> List[str]:
+    """Returns all fallback keys starting from the current round-robin position."""
+    global _key_index
+    if not KEY_POOL:
+        return []
+    with _key_lock:
+        start = _key_index
+        _key_index = (_key_index + 1) % len(KEY_POOL)
+    return [KEY_POOL[(start + i) % len(KEY_POOL)] for i in range(len(KEY_POOL))]
 
 
 @app.get("/health")
@@ -57,26 +63,53 @@ def verify_endpoint(
     user_provided_key = auth.credentials if auth else None
 
     if user_provided_key and user_provided_key.strip() != "FALLBACK":
-        final_api_key = user_provided_key
-        provider = req.provider
+        # User-provided key: single attempt, no fallback pool available
+        try:
+            result = frama_c.verify_c_code(
+                user_code=req.code,
+                user_api_key=user_provided_key,
+                api_provider=req.provider,
+                user_goal=req.user_goal,
+            )
+            if result.get("api_error"):
+                raise HTTPException(
+                    status_code=401,
+                    detail="The provided API key failed. Please verify your key and try again.",
+                )
+            return result
+        except HTTPException:
+            raise
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=str(e))
     else:
-        final_api_key = get_next_fallback_key()
-        if not final_api_key:
+        # Fallback pool: try each key in round-robin order until one works
+        keys = get_fallback_keys_in_order()
+        if not keys:
             raise HTTPException(
                 status_code=400, detail="No key provided and no fallbacks configured."
             )
-        provider = "gemini"
-    try:
-        # 3. Call your logic with the chosen key
-        result = frama_c.verify_c_code(
-            user_code=req.code,
-            user_api_key=final_api_key,
-            api_provider=provider,
-            user_goal=req.user_goal,
+
+        last_detail = "All fallback keys exhausted without a successful response."
+        for key in keys:
+            try:
+                result = frama_c.verify_c_code(
+                    user_code=req.code,
+                    user_api_key=key,
+                    api_provider="gemini",
+                    user_goal=req.user_goal,
+                )
+                if result.get("api_error"):
+                    last_detail = result.get("error", "API key did not respond.")
+                    continue
+                return result
+            except Exception as e:
+                last_detail = str(e)
+                continue
+
+        raise HTTPException(
+            status_code=503,
+            detail=f"All fallback API keys failed. Last error: {last_detail}",
         )
-        return result
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
 
 
 # We also add the port binding here just in case your Dockerfile CMD isn't handling it!
