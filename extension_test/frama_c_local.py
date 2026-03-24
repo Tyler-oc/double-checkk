@@ -13,7 +13,7 @@ import google.generativeai as genai
 # ==========================================
 # CONFIGURATION - CHANGE THESE
 # ==========================================
-API_KEY = "AIzaSyAtzUTz7_W3-8aLAvfg_5yCJWnkVCZ2WVg"
+API_KEY = ""
 PROVIDER = "google"  # Change to "google", "openai", or "anthropic"
 
 CODE_TO_VERIFY = """
