@@ -332,6 +332,61 @@ def classify_code(user_code: str, user_api_key: str, api_provider: str):
     return task_description, category
 
 
+def categorize_frama_error(frama_output: str) -> str:
+    """Return a targeted correction hint based on the category of Frama-C error.
+
+    This prepends actionable guidance to the raw Frama-C log so the LLM can fix
+    the specific class of mistake rather than guessing from raw parser output.
+    """
+    out = frama_output.lower()
+
+    if "unbound logic variable" in out or "unbound logic type variable" in out:
+        return (
+            "TARGETED HINT: An unbound variable in ACSL usually means you tried to redefine "
+            "a C `#define` macro as a `logic integer` constant, creating a conflict, or you "
+            "accidentally stripped the `#define`. Use the macro name directly in annotations "
+            "— do NOT add a `/*@ logic integer N = ...; */` for a macro that already exists."
+        )
+
+    if "terminates" in out and ("syntax error" in out or "parse error" in out):
+        return (
+            "TARGETED HINT: ACSL requires `terminates` to appear BEFORE `assigns` in a "
+            "function contract. Move the `terminates` clause above the `assigns` clause."
+        )
+
+    if "syntax error" in out and ("valid" in out or "\\valid" in frama_output):
+        return (
+            "TARGETED HINT: \\valid range syntax requires parentheses around the range: "
+            "\\valid(ptr + (0 .. n-1)) or \\valid(&ptr[0 .. n-1]). "
+            "Do NOT write \\valid(ptr + n) to validate a range — that only checks one element."
+        )
+
+    if "logic label" in out or ("label" in out and "not found" in out):
+        return (
+            "TARGETED HINT: A predicate declared with logic label parameters like "
+            "`predicate P{L1,L2}(...)` requires explicit labels at every call site: "
+            "`P{Pre, Here}(...)`. You cannot call it without supplying the label arguments."
+        )
+
+    if "loop" in out and "assigns" in out and ("syntax error" in out or "parse error" in out):
+        return (
+            "TARGETED HINT: `loop assigns` must be a separate clause, not nested inside "
+            "`loop invariant`. Place them on separate lines in the same /*@ ... */ block:\n"
+            "  /*@ loop invariant ...;\n"
+            "      loop assigns ...;\n"
+            "      loop variant ...; */"
+        )
+
+    if "not a predicate" in out or ("logic" in out and "type" in out and "bool" in out):
+        return (
+            "TARGETED HINT: Use `predicate` (not `logic boolean` or `logic int`) to declare "
+            "boolean properties using \\forall/\\exists. `logic` is reserved for value-returning "
+            "functions only."
+        )
+
+    return ""
+
+
 def verify_c_code(
     user_code: str, user_api_key: str, api_provider: str, user_goal: str = None
 ):
@@ -410,11 +465,16 @@ You are an expert Frama-C/ACSL Formal Verification Engine. Your task is to mathe
 2. **NO VACUOUS PROOFS:** Do NOT use `requires \\false;` or `ensures \\true;` to cheat the prover. You must write mathematically sound proofs.
 3. **MEMORY SAFETY MUST BE PROVED:** If the code uses pointers or arrays, you MUST include `\\valid`, `\\valid_read`, or `\\separated` clauses in the preconditions.
 4. **LOOPS REQUIRE VARIANTS:** Every loop must have a `loop variant` to prove termination and a `loop invariant` to track state.
-5. **NO POINTER ARITHMETIC IN PREDICATES:** Never use 'ptr + size' inside \valid. You MUST use exact range notation: \valid(ptr + (0 .. size-1)).
+5. VALID RANGE SYNTAX: To validate a range of memory, ALWAYS use `\\valid(ptr + (0 .. n-1))` or `\\valid(&ptr[0 .. n-1])`. The parentheses around the range (lo .. hi) are mandatory. NEVER write `\\valid(ptr + n)` for a range — this only validates the single element at index n, not a range.
 6. TYPE MATCHING: If the C code uses `size_t` or `size_type`, any arithmetic in ACSL (like `n - 1`) must be explicitly cast back to that type to prevent mathematical integer mismatch errors.
 7. STRUCT ASSIGNS: If a function modifies a struct, you MUST declare the exact fields modified (e.g., `assigns s->size;`).
 8. NO AXIOMATIC LABELS: Do not use `Here` or `Pre` inside global `logic` or `axiomatic` definitions.
-9. NO LAMBDAS: Do not use anonymous lambda expressions with `\sum`. Use recursive logic functions.
+9. NO INLINE LOGIC: Do not use lambdas or ternary conditionals ( ? : ) inside \\sum. Use a named recursive logic function instead. Example: `logic integer arr_sum(int *a, integer i) = (i <= 0) ? 0 : a[i-1] + arr_sum(a, i-1);`
+10. CONTRACT CLAUSE ORDER: ACSL function contracts must follow this strict order: `requires` -> `terminates` -> `assigns` -> `ensures`. NEVER place `terminates` after `assigns`. This is a fatal parse error.
+11. LOOP CLAUSE SEPARATION: `loop invariant`, `loop assigns`, and `loop variant` are each separate clauses on their own lines inside one `/*@ ... */` block. NEVER nest `loop assigns` inside a `loop invariant` expression.
+12. LOGIC FUNCTIONS vs PREDICATES: `logic` declares a value-returning function; `predicate` declares a boolean property. NEVER use \\forall, \\exists, or boolean operators as the body of a `logic` declaration — use `predicate` instead. When a predicate declares logic label parameters (e.g., `predicate P{L1,L2}(...)`), EVERY call site must supply them explicitly: `P{Pre, Here}(...)`.
+13. MACRO CONSTANTS IN ACSL: C `#define` macros (e.g., `#define N 100000`) ARE visible in ACSL annotations after preprocessing. Use the macro name directly in loop invariants. NEVER redefine a `#define` constant as a `/*@ logic integer N = ...; */` — this creates a duplicate symbol error.
+14. ARRAYS AS PREDICATE ARGUMENTS: A C array variable does NOT automatically decay to a pointer in ACSL predicate arguments. Always pass the address explicitly: `predicate(&a[0], n)` or `predicate(a + 0, n)` — NEVER `predicate(a, n)` when `a` is a stack-allocated array.
 
 ### OUTPUT FORMAT
 * You must output ONLY the fully annotated C code inside three square brackets. Example: `[[[ /*@ requires... */ int main() { ... } ]]]`. 
@@ -545,8 +605,10 @@ To abort, output EXACTLY this string and nothing else:
                 )
         else:
             dprint("verification failed; continuing to next trial")
+            hint = categorize_frama_error(frama_output)
+            hint_block = f"{hint}\n\n" if hint else ""
             chat_log.append(
-                f"Frama-C verification failed.\n"
+                f"{hint_block}Frama-C verification failed.\n"
                 f"Here is the output from Frama-C:\n{frama_output}\n\n"
                 f"Please analyze these errors, adjust the ACSL annotations, and try again."
             )
