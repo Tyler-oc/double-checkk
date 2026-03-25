@@ -5,7 +5,7 @@ import requests
 from datetime import datetime
 
 # --- CONFIGURATION ---
-BENCHMARK_DIR = os.path.join(os.path.dirname(__file__), "acsl_by_example")
+BENCHMARK_DIR = os.path.join(os.path.dirname(__file__), "sv_comp")
 RESULTS_FILE = os.path.join(
     os.path.dirname(__file__), f"results_{datetime.now().strftime('%Y%m%d_%H%M')}.csv"
 )
