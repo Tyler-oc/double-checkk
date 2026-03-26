@@ -80,6 +80,16 @@ def strip_svcomp_native_decls(code: str) -> str:
         flags=re.MULTILINE,
     )
 
+    # Strip __assert_fail declarations — these are assert() infrastructure that becomes
+    # orphaned when we strip #include <assert.h> and reach_error(). No callers remain,
+    # and Frama-C has no built-in model for a bare extern declaration without the header.
+    code = re.sub(
+        r"^\s*extern\s+void\s+__assert_fail\s*\([^;]*\).*;\s*$",
+        "",
+        code,
+        flags=re.MULTILINE,
+    )
+
     # Strip reach_error() function definitions (single or multi-line, up to 2 brace levels)
     code = re.sub(
         r"\bvoid\s+reach_error\s*\(\s*\)\s*\{(?:[^{}]|\{[^{}]*\})*\}",

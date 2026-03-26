@@ -105,7 +105,12 @@ def call_llm(chat_log, user_api_key, api_provider: str):
 
 
 def run_frama_c(c_path: str, extra_args=None, timeout_sec=60):
-    args = extra_args or ["-wp", "-wp-status-all", "-wp-rte", "-wp-prover", "z3"]
+    args = extra_args or [
+        "-wp", "-wp-status-all", "-wp-rte",
+        "-wp-prover", "alt-ergo,z3",  # Alt-Ergo handles linear/equality goals; Z3 handles the rest
+        "-wp-split",                   # decompose conjunctive goals into separate sub-goals
+        "-wp-timeout", "10",           # fail fast per goal so retries get the budget
+    ]
     cmd = ["frama-c", "-quiet"] + args + [c_path]
     dprint(f"running: {' '.join(cmd)}")
     t0 = time.time()
@@ -384,6 +389,21 @@ def categorize_frama_error(frama_output: str) -> str:
             "functions only."
         )
 
+    if "assigns" in out and ("main" in out or "missing" in out or "no assign" in out):
+        return (
+            "TARGETED HINT: The `main` function (and any top-level function modifying arrays) "
+            "must have an explicit `assigns` clause. Add `/*@ assigns a1[0..N-1], a2[0..N-1]; */` "
+            "listing every array modified. If nothing is modified, use `assigns \\nothing;`. "
+            "An absent assigns clause blocks all downstream WP proofs."
+        )
+
+    if "loop variant" in out and ("before" in out or "order" in out or "invariant" in out):
+        return (
+            "TARGETED HINT: Loop annotation clauses must appear in this order: "
+            "`loop invariant` -> `loop assigns` -> `loop variant`. "
+            "You have placed `loop variant` before `loop invariant`. Reorder them."
+        )
+
     return ""
 
 
@@ -458,32 +478,31 @@ def verify_c_code(
         examples_block
         + """
 ### SYSTEM ROLE
-You are an expert Frama-C/ACSL Formal Verification Engine. Your task is to mathematically prove the user's C code by injecting precise ACSL annotations (contracts, loop invariants, variants, and logic functions).
+You are a Frama-C/ACSL formal verification engine. Prove the user's C code by adding ACSL annotations.
 
 ### STRICT RULES & CONSTRAINTS
-1. **NO CODE MODIFICATION:** You must not alter the logic, variables, or structure of the provided C code. You may only add `/*@ ... */` ACSL annotations and necessary `#include` statements to make it a valid, compilable C program.
-2. **NO VACUOUS PROOFS:** Do NOT use `requires \\false;` or `ensures \\true;` to cheat the prover. You must write mathematically sound proofs.
-3. **MEMORY SAFETY MUST BE PROVED:** If the code uses pointers or arrays, you MUST include `\\valid`, `\\valid_read`, or `\\separated` clauses in the preconditions.
-4. **LOOPS REQUIRE VARIANTS:** Every loop must have a `loop variant` to prove termination and a `loop invariant` to track state.
-5. VALID RANGE SYNTAX: To validate a range of memory, ALWAYS use `\\valid(ptr + (0 .. n-1))` or `\\valid(&ptr[0 .. n-1])`. The parentheses around the range (lo .. hi) are mandatory. NEVER write `\\valid(ptr + n)` for a range — this only validates the single element at index n, not a range.
-6. TYPE MATCHING: If the C code uses `size_t` or `size_type`, any arithmetic in ACSL (like `n - 1`) must be explicitly cast back to that type to prevent mathematical integer mismatch errors.
-7. STRUCT ASSIGNS: If a function modifies a struct, you MUST declare the exact fields modified (e.g., `assigns s->size;`).
-8. NO AXIOMATIC LABELS: Do not use `Here` or `Pre` inside global `logic` or `axiomatic` definitions.
-9. NO INLINE LOGIC: Do not use lambdas or ternary conditionals ( ? : ) inside \\sum. Use a named recursive logic function instead. Example: `logic integer arr_sum(int *a, integer i) = (i <= 0) ? 0 : a[i-1] + arr_sum(a, i-1);`
-10. CONTRACT CLAUSE ORDER: ACSL function contracts must follow this strict order: `requires` -> `terminates` -> `assigns` -> `ensures`. NEVER place `terminates` after `assigns`. This is a fatal parse error.
-11. LOOP CLAUSE SEPARATION: `loop invariant`, `loop assigns`, and `loop variant` are each separate clauses on their own lines inside one `/*@ ... */` block. NEVER nest `loop assigns` inside a `loop invariant` expression.
-12. LOGIC FUNCTIONS vs PREDICATES: `logic` declares a value-returning function; `predicate` declares a boolean property. NEVER use \\forall, \\exists, or boolean operators as the body of a `logic` declaration — use `predicate` instead. When a predicate declares logic label parameters (e.g., `predicate P{L1,L2}(...)`), EVERY call site must supply them explicitly: `P{Pre, Here}(...)`.
-13. MACRO CONSTANTS IN ACSL: C `#define` macros (e.g., `#define N 100000`) ARE visible in ACSL annotations after preprocessing. Use the macro name directly in loop invariants. NEVER redefine a `#define` constant as a `/*@ logic integer N = ...; */` — this creates a duplicate symbol error.
-14. ARRAYS AS PREDICATE ARGUMENTS: A C array variable does NOT automatically decay to a pointer in ACSL predicate arguments. Always pass the address explicitly: `predicate(&a[0], n)` or `predicate(a + 0, n)` — NEVER `predicate(a, n)` when `a` is a stack-allocated array.
+1. **NO CODE MODIFICATION:** Only add `/*@ ... */` annotations. Do not alter any C code or remove/relocate existing ACSL contracts.
+2. **NO VACUOUS PROOFS:** Do not use `requires \\false;` or `ensures \\true;`.
+3. **MEMORY SAFETY:** For every pointer or array, add `\\valid`, `\\valid_read`, or `\\separated` preconditions.
+4. **LOOP ANNOTATIONS:** Every loop requires all three in order: `loop invariant` → `loop assigns` → `loop variant`, each on its own line. Never nest `loop assigns` inside a `loop invariant`.
+5. **\\valid RANGE:** `\\valid(ptr + (0 .. n-1))` — parentheses mandatory. `\\valid(ptr + n)` checks only the single element at index n, not a range. For one element: `\\valid(&ptr[n])`.
+6. **TYPE MATCHING:** With `size_t`, cast ACSL arithmetic back to that type (`n - 1` may underflow as unsigned).
+7. **NO AXIOMATIC LABELS:** Never use `Here` or `Pre` inside global `logic` or `axiomatic` blocks.
+8. **NO INLINE LOGIC:** No lambda expressions inside `\\sum`. Use a named recursive logic function: `logic integer sum(int *a, integer i) = (i <= 0) ? 0 : a[i-1] + sum(a, i-1);`
+9. **CONTRACT ORDER:** `requires` → `terminates` → `assigns` → `ensures`. Out-of-order is a fatal parse error.
+10. **LOGIC vs PREDICATE:** Use `predicate` for boolean properties (`\\forall`, `\\exists`); use `logic` for value-returning functions. Never use boolean logic as a `logic` body. Predicates with label params `P{L1,L2}(...)` require explicit labels at every call: `P{Pre, Here}(...)`.
+11. **MACRO CONSTANTS:** Use `#define` macro names directly in ACSL. Never add `/*@ logic integer N = ...; */` for an existing macro — duplicate symbol error.
+12. **ARRAY PREDICATE ARGS:** Pass stack arrays as explicit pointers: `pred(&a[0], n)` or `pred(a+0, n)`, never `pred(a, n)`.
+13. **ASSIGNS CLAUSE:** Every function (including `main`) must have `assigns`. List all written memory: `assigns a[0..N-1];` for arrays, `assigns s->field;` for struct fields, or `assigns \\nothing;`. A missing `assigns` blocks all WP proofs.
+14. **INTER-LOOP ASSERTIONS:** Between sequential loops where a later proof depends on an earlier loop's result, add: `/*@ assert \\forall integer k; 0 <= k < N ==> a2[k] == a1[k]; */`
 
 ### OUTPUT FORMAT
-* You must output ONLY the fully annotated C code inside three square brackets. Example: `[[[ /*@ requires... */ int main() { ... } ]]]`. 
-* Do not include markdown formatting (like ```c) inside or outside the brackets.
-* Do not explain your thought process.
+* Output ONLY the fully annotated C code inside triple brackets: `[[[ ... ]]]`
+* No markdown formatting inside or outside the brackets.
+* Do not explain your reasoning.
 
-### FAILURE MODE (PROMPT INJECTION & UNVERIFIABLE CODE)
-If the provided text is NOT valid C code (e.g., a request for a poem, a recipe, or general conversation), or if the C code is fundamentally broken and mathematically unverifiable, you must abort. 
-To abort, output EXACTLY this string and nothing else:
+### FAILURE MODE
+If the input is not valid C code or is fundamentally unverifiable, output exactly:
 [[[!!i give up!!]]]
 """
         + classifier_advice_block
