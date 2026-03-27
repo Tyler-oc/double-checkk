@@ -57,7 +57,10 @@ def call_llm(chat_log, user_api_key, api_provider: str):
                 gemini_messages.append({"role": role, "parts": [content]})
 
             dprint(f"call_llm [gemini]: sending {len(gemini_messages)} messages")
-            resp = model.generate_content(gemini_messages)
+            resp = model.generate_content(
+                gemini_messages,
+                request_options={"timeout": 60},
+            )
             dprint(
                 f"call_llm [gemini]: received response of length {len(resp.text) if resp.text else 0}"
             )
@@ -347,10 +350,40 @@ def categorize_frama_error(frama_output: str) -> str:
 
     if "unbound logic variable" in out or "unbound logic type variable" in out:
         return (
-            "TARGETED HINT: An unbound variable in ACSL usually means you tried to redefine "
-            "a C `#define` macro as a `logic integer` constant, creating a conflict, or you "
-            "accidentally stripped the `#define`. Use the macro name directly in annotations "
-            "— do NOT add a `/*@ logic integer N = ...; */` for a macro that already exists."
+            "TARGETED HINT: An unbound variable in ACSL means one of two things:\n"
+            "  (a) The original source has `#define N 100000` — Frama-C's preprocessor "
+            "DOES expand this in ACSL. Use N directly: `loop invariant 0 <= i <= N;`. "
+            "Do NOT add `/*@ logic integer N = 100000; */` — that creates a duplicate "
+            "symbol conflict with the existing `#define`.\n"
+            "  (b) You accidentally stripped the `#define` line from the source. "
+            "Restore it exactly as it appeared in the original code."
+        )
+
+    if "malloc" in out or ("memory" in out and "allocat" in out) or "frama_c_malloc" in out:
+        return (
+            "TARGETED HINT: WP cannot automatically track heap memory from `malloc`. "
+            "After each `ptr = malloc(n * sizeof(T))` call, add validity assertions:\n"
+            "  `//@ assert ptr != \\null;\n"
+            "  //@ assert \\valid(ptr + (0 .. n-1));`\n"
+            "Also add `requires n > 0; requires n < 1000000;` to bound the size. "
+            "If the pointer is passed to functions, add `requires \\valid(ptr + (0 .. n-1));` "
+            "as a precondition to those functions. "
+            "Keep loop invariants focused on pointer validity and index bounds — do not try "
+            "to prove value-specific properties for uninitialized malloc'd memory."
+        )
+
+    if "__verifier_nondet" in out or (
+        "assigns" in out and "nondet" in out
+    ):
+        return (
+            "TARGETED HINT: `__VERIFIER_nondet_*` functions return formally non-deterministic "
+            "values — WP treats their return as completely arbitrary. You CANNOT prove "
+            "value-specific properties (e.g., `a[i] == element`) that depend on these values. "
+            "Focus your loop invariants on STRUCTURAL properties: array bounds, index ranges, "
+            "pointer validity. The existing `/*@ assigns \\nothing; */` stubs on these "
+            "functions are correct — do NOT remove or modify them. "
+            "If the assertion depends on a nondet value, consider whether it's provable at all; "
+            "if not, add only the memory-safety invariants (bounds, validity)."
         )
 
     if "terminates" in out and ("syntax error" in out or "parse error" in out):
@@ -389,7 +422,7 @@ def categorize_frama_error(frama_output: str) -> str:
             "functions only."
         )
 
-    if "assigns" in out and ("main" in out or "missing" in out or "no assign" in out):
+    if "assigns" in out and ("main" in out or "missing" in out or "no assign" in out) and "__verifier_nondet" not in out:
         return (
             "TARGETED HINT: The `main` function (and any top-level function modifying arrays) "
             "must have an explicit `assigns` clause. Add `/*@ assigns a1[0..N-1], a2[0..N-1]; */` "
@@ -495,6 +528,8 @@ You are a Frama-C/ACSL formal verification engine. Prove the user's C code by ad
 12. **ARRAY PREDICATE ARGS:** Pass stack arrays as explicit pointers: `pred(&a[0], n)` or `pred(a+0, n)`, never `pred(a, n)`.
 13. **ASSIGNS CLAUSE:** Every function (including `main`) must have `assigns`. List all written memory: `assigns a[0..N-1];` for arrays, `assigns s->field;` for struct fields, or `assigns \\nothing;`. A missing `assigns` blocks all WP proofs.
 14. **INTER-LOOP ASSERTIONS:** Between sequential loops where a later proof depends on an earlier loop's result, add: `/*@ assert \\forall integer k; 0 <= k < N ==> a2[k] == a1[k]; */`
+15. **PRESERVE EXISTING ACSL:** If the source already contains `/*@ ... */` blocks (e.g., `assigns \\nothing;` on extern stubs, `requires \\true;` on helper functions), do NOT remove, shorten, or rewrite them. Only ADD new annotations to un-annotated locations. Stripping existing contracts breaks WP's reasoning chain.
+16. **NON-DETERMINISTIC INPUTS:** When code uses `__VERIFIER_nondet_*`, `rand()`, `scanf()`, or other value-returning extern functions, your loop invariants must be valid for ALL possible return values. Do not attempt to prove that a specific value appears or does not appear; instead prove structural properties (index bounds, array validity, ordering relations) that hold regardless of the values.
 
 ### OUTPUT FORMAT
 * Output ONLY the fully annotated C code inside triple brackets: `[[[ ... ]]]`
